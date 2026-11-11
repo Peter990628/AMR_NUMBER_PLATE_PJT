@@ -1,0 +1,13 @@
+scan_preprocessor:
+  ros__parameters:
+    use_sim_time: true
+    input_topic: /observation_lidar/scan
+    marker_topic: /debug/observation_points
+    range_min_m: 0.1
+    range_max_m: 6.0
+    # Sensor coordinates: 0 = +X, +90 = +Y. Begin with a full-circle ROI.
+    # Example left-side sector: 30.0 to 150.0 (confirm actual scan axes first).
+    roi_min_deg: -180.0
+    roi_max_deg: 180.0
+    marker_size_m: 0.035
+    marker_lifetime_sec: 1.0
