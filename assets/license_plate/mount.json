@@ -1,0 +1,28 @@
+{
+  "center_cm": [
+    0.03560829162597656,
+    75.45392584195943,
+    -213.8166035765329
+  ],
+  "right": [
+    -1.0,
+    0.0,
+    0.0
+  ],
+  "up": [
+    0.0,
+    0.9700304649988948,
+    0.24298332653502805
+  ],
+  "normal": [
+    0.0,
+    0.24298332653502805,
+    -0.9700304649988948
+  ],
+  "plate_width_m": 0.52,
+  "plate_height_m": 0.11,
+  "label": "123가4567",
+  "purpose": "Synthetic camera observation target; not an exact official plate design",
+  "source_mesh": "/World/Dummy/nplate/nplate",
+  "surface_offset_m": 0.01
+}

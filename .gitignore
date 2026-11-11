@@ -1,0 +1,32 @@
+# Downloaded third-party vehicle and its converted asset (local use only).
+/sedan_car.fbx
+/sedan_car.usd
+/assets/third_party/
+
+# Local editor indexes, machine settings, and agent configuration.
+/.vscode/
+/.codex/
+/.agents/
+/.aws/
+.env
+.env.*
+!.env.example
+
+# ROS 2 / CMake build output and runtime logs.
+/build/
+/install/
+/log/
+/logs/
+*.log
+
+# Python caches and virtual environments.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Temporary files and asset-browser thumbnails.
+*.tmp
+*.bak
+*~
+.thumbs/
