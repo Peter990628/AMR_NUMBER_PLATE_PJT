@@ -42,6 +42,11 @@ Visualization Manager:
         History Policy: Keep Last
       Namespaces:
         observation_points: true
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
   Views:
     Current:
       Class: rviz_default_plugins/TopDownOrtho

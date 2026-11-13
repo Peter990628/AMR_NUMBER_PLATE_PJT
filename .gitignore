@@ -2,6 +2,9 @@
 /sedan_car.fbx
 /sedan_car.usd
 /assets/third_party/
+/assets/models/
+/local_artifacts/
+/third_party/onnxruntime-*/
 
 # Local editor indexes, machine settings, and agent configuration.
 /.vscode/
@@ -33,3 +36,7 @@ venv/
 *.bak
 *~
 .thumbs/
+
+# Private daily work notes (local only).
+/WORK_LOG_2026-11-11.md
+/WORK_LOG_2026-11-12.md

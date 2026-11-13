@@ -1,0 +1,25 @@
+plate_observation:
+  ros__parameters:
+    use_sim_time: true
+    input_topic: /front_stereo_camera/left/image_raw
+    observation_topic: /plate/observation
+    debug_topic: /debug/plate_observation
+    # Supplied explicitly through the launch model_path argument.
+    model_path: ''
+    input_size: 640
+    num_classes: 4
+    plate_class_id: 2
+    inference_threads: 2
+    opencv_threads: 2
+    detector_score_threshold: 0.25
+    nms_iou_threshold: 0.45
+    # Starting thresholds for this synthetic scene; not OCR accuracy guarantees.
+    min_confidence: 0.5
+    min_width_px: 80.0
+    min_height_px: 16.0
+    border_margin_ratio: 0.02
+    min_tracking_iou: 0.3
+    required_consecutive: 3
+    image_timeout_sec: 1.0
+    max_image_age_sec: 0.5
+    future_tolerance_sec: 0.1

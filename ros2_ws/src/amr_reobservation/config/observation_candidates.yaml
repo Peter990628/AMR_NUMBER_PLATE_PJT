@@ -1,0 +1,12 @@
+observation_candidates:
+  ros__parameters:
+    use_sim_time: true
+    input_topic: /vehicle_side/estimate
+    output_topic: /observation_candidates
+    marker_topic: /debug/observation_candidates
+    expected_frame: observation_lidar
+    extension_m: 0.8
+    standoff_m: 1.0
+    input_timeout_sec: 1.0
+    max_input_age_sec: 0.5
+    future_tolerance_sec: 0.1

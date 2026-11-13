@@ -1,4 +1,16 @@
-# 1단계: 관측 LiDAR C++ 전처리
+# AMR 관측 LiDAR C++ 처리
+
+**4단계 첫 검증:** [평행 배치의 관측 후보](docs/stage4_parallel_candidates.md). 측면 양 끝의 센서 관측 후보와 시선을 표시하고 실제 LiDAR 데이터에서 거리·방향을 검증한다. 자동 이동 목표는 아직 발행하지 않는다.
+
+**4단계 회전 비교:** [고정 좌표계 기준 수집과 ±10° 비교](docs/stage4_rotation_check.md). 원본 stamp의 TF로 후보를 `odom`에 변환하고, 같은 실행 구간에서 회전 전후 평균과 편차를 비교한다. +10° 자세 → 평행 및 평행 → −10° 평균 비교는 통과했다. 원본 후보의 순간 점프는 별도로 기록했다.
+
+**4단계 연속 관측 확인:** [후보의 시간 일관성 확인](docs/stage4_candidate_stability.md). 기본 launch는 `/observation_candidates/raw`를 검사하고, 3회 일관된 현재 후보만 `/observation_candidates`로 채택한다. 급변·무효·입력 중단 시 빈 후보와 마커 삭제를 발행한다. 원본 기하의 평균 처리나 자동 이동은 수행하지 않는다.
+
+**3단계 실행:** [번호판 관측 품질 판정](docs/stage3_plate_observation.md). ONNX Runtime C++ 추론, 박스 크기·여백·연속 관측 판정, 영상 타임아웃 처리를 제공한다. 전체 패키지를 처음 빌드하기 전에 프로젝트 루트에서 `bash tools/setup_onnxruntime.sh`로 로컬 C++ 런타임을 준비한다.
+
+**2단계 실행:** [차량 측면 후보 추정](docs/stage2_vehicle_side.md). 1단계 전처리 라이브러리를 재사용하여 클러스터링·RANSAC·PCA와 typed ROS 결과를 제공한다. 아래는 독립적으로 실행할 수 있는 1단계 안내다.
+
+## 1단계: 전처리
 
 `/observation_lidar/scan`을 받아 유효한 거리를 XY 점으로 바꾸고, 거리·각도 ROI를 적용한 결과를 `/debug/observation_points`에 표시한다. 현재 출력은 **필터링된 관측 점**이며, 차량 분류나 측면 직선 추정 결과가 아니다.
 
@@ -98,6 +110,6 @@ colcon test-result --verbose
 
 단위 테스트는 좌표·빔 번호, 잘못된 거리, 경계 포함 여부, 일반/전체/경계 통과 ROI, 음수 각도 간격, 빈 입력과 설정 오류를 검증한다. 별도로 실제 장면에서 원본 점과 처리 점의 일치, ROI 변경 결과를 확인한다.
 
-현재는 정지 상태에서 한 스캔을 처리한다. 빔별 취득 시간에 따른 주행 중 왜곡 보정과 다른 좌표계 변환은 수행하지 않는다. 차량 측면 추정은 다음 단계에서 추가한다.
+현재는 정지 상태에서 한 스캔을 처리한다. 빔별 취득 시간에 따른 주행 중 왜곡 보정과 다른 좌표계 변환은 수행하지 않는다. 측면 추정은 별도 2단계 노드에서 이 전처리 라이브러리를 재사용한다.
 
 메시지와 QoS 참고: [ROS 2 Humble LaserScan 정의](https://github.com/ros2/common_interfaces/blob/humble/sensor_msgs/msg/LaserScan.msg), [Marker 정의](https://github.com/ros2/common_interfaces/blob/humble/visualization_msgs/msg/Marker.msg), [rclcpp QoS 정의](https://github.com/ros2/rclcpp/blob/humble/rclcpp/include/rclcpp/qos.hpp).

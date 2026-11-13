@@ -1,0 +1,26 @@
+vehicle_side_estimator:
+  ros__parameters:
+    use_sim_time: true
+    input_topic: /observation_lidar/scan
+    estimate_topic: /vehicle_side/estimate
+    marker_topic: /debug/vehicle_side
+    fit_diagnostics_topic: /debug/vehicle_side/fit_diagnostics
+    range_min_m: 0.1
+    range_max_m: 6.0
+    roi_min_deg: -180.0
+    roi_max_deg: 180.0
+    # Split on XY distance or too many missing original beams.
+    cluster_gap_m: 0.15
+    max_missing_beams: 2
+    min_cluster_points: 20
+    ransac_iterations: 100
+    # Maximum PCA refits per cluster, independent of RANSAC trials (1..100).
+    # Stops immediately when the inlier set converges; restart to apply.
+    refinement_limit: 20
+    ransac_seed: 7
+    inlier_distance_m: 0.03
+    min_inliers: 20
+    min_inlier_ratio: 0.5
+    min_observed_length_m: 0.5
+    max_rmse_m: 0.02
+    marker_lifetime_sec: 1.0
