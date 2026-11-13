@@ -1,0 +1,19 @@
+# Manual test input for the saved failure layout, not upstream vehicle detection.
+# Values are relative to base_link ONLY AT INITIALIZATION, then frozen in odom.
+# The successful recovery scene is not consulted. Adjust the yellow hint in RViz
+# if it does not lie near the target vehicle. No vehicle heading is fabricated.
+mock_recovery_request:
+  ros__parameters:
+    use_sim_time: true
+    fixed_frame: odom
+    base_frame: base_link
+    scan_topic: /observation_lidar/scan
+    request_topic: /reobservation/request
+    target_id: manual_failure_vehicle
+    failure_reason: not_detected
+    vehicle_hint_x_in_anchor_base_m: 3.5
+    vehicle_hint_y_in_anchor_base_m: 0.4
+    approach_x_in_anchor_base_m: 0.0
+    approach_y_in_anchor_base_m: 0.0
+    approach_yaw_from_anchor_deg: 0.0
+    valid_for_sec: 300.0

@@ -1,0 +1,59 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Background Color: 35; 35; 35
+    Fixed Frame: odom
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid (1 m)
+      Enabled: true
+      Cell Size: 1
+      Plane: XY
+      Plane Cell Count: 20
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Recovery preview (no navigation)
+      Enabled: true
+      Topic:
+        Value: /debug/reobservation/preview
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+        History Policy: Keep Last
+    - Class: rviz_default_plugins/LaserScan
+      Name: Original scan (optional)
+      Enabled: false
+      Topic:
+        Value: /observation_lidar/scan
+        Depth: 5
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        History Policy: Keep Last
+      Style: Flat Squares
+      Size (m): 0.015
+      Color Transformer: FlatColor
+      Color: 220; 220; 220
+      Position Transformer: XYZ
+      Decay Time: 0
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Recovery preview
+      Target Frame: <Fixed Frame>
+      Scale: 130
+      Angle: 0
+      X: 1.2
+      Y: 0.4
+Window Geometry:
+  Width: 1800
+  Height: 900

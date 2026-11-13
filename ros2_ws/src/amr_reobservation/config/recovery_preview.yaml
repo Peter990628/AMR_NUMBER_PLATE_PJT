@@ -1,0 +1,37 @@
+recovery_preview:
+  ros__parameters:
+    use_sim_time: true
+    fixed_frame: odom
+    base_frame: base_link
+    camera_optical_frame: front_stereo_camera_left_optical
+    scan_topic: /observation_lidar/scan
+    request_topic: /reobservation/request
+    output_topic: /reobservation/preview
+    marker_topic: /debug/reobservation/preview
+    plate_topic: /plate/observation
+    forward_step_m: 0.35
+    lateral_step_m: 0.35
+    min_target_distance_m: 1.0
+    max_turn_deg: 60.0
+    # Preview rejection distance from base origin to observed XY returns.
+    # NOT a calibrated footprint, free-space certificate, or swept-path check.
+    clearance_radius_m: 0.75
+    target_association_radius_m: 2.0
+    # Ordered observed contour, associated with the approximate vehicle hint.
+    contour_cluster_gap_m: 0.18
+    contour_max_missing_beams: 2
+    contour_min_cluster_points: 12
+    contour_ambiguity_margin_m: 0.15
+    contour_split_distance_m: 0.06
+    contour_min_segment_length_m: 0.45
+    contour_min_segment_points: 12
+    contour_max_aims: 3
+    # Display only: 0=A1, 1=A2, 2=A3. All 6xN pairs remain in preview output.
+    marker_aim_index: 0
+    range_min_m: 0.1
+    range_max_m: 6.0
+    scan_timeout_sec: 1.5
+    max_scan_age_sec: 0.5
+    future_tolerance_sec: 0.1
+    tf_wait_sec: 0.3
+    request_timeout_sec: 300.0

@@ -26,6 +26,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/VehicleSideFitDiagnostics.msg"
   "msg/PlateObservation.msg"
   "msg/ObservationCandidates.msg"
+  "msg/RecoveryRequest.msg"
+  "msg/RecoveryPreview.msg"
   DEPENDENCIES std_msgs geometry_msgs)
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
@@ -83,24 +85,38 @@ target_link_libraries(observation_candidate_stabilizer_node candidate_stability 
 ament_target_dependencies(observation_candidate_stabilizer_node
   rclcpp rcl_interfaces geometry_msgs std_msgs visualization_msgs tf2 tf2_ros)
 
+add_library(recovery_preview src/recovery_preview.cpp)
+target_compile_features(recovery_preview PUBLIC cxx_std_17)
+target_include_directories(recovery_preview PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+add_library(recovery_contour src/recovery_contour.cpp)
+target_compile_features(recovery_contour PUBLIC cxx_std_17)
+target_include_directories(recovery_contour PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+add_executable(recovery_preview_node src/recovery_preview_node.cpp)
+target_link_libraries(recovery_preview_node recovery_preview recovery_contour "${cpp_typesupport_target}")
+ament_target_dependencies(recovery_preview_node
+  rclcpp rcl_interfaces sensor_msgs geometry_msgs std_msgs visualization_msgs tf2 tf2_ros)
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(scan_preprocessor PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(scan_preprocessor_node PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(vehicle_side_estimator PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(vehicle_side_estimator_node PRIVATE -Wall -Wextra -Wpedantic)
-  foreach(target plate_observation plate_detector plate_observation_node plate_image_probe observation_candidates observation_candidates_node candidate_stability observation_candidate_stabilizer_node)
+  foreach(target plate_observation plate_detector plate_observation_node plate_image_probe observation_candidates observation_candidates_node candidate_stability observation_candidate_stabilizer_node recovery_preview recovery_contour recovery_preview_node)
     target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
   endforeach()
 endif()
 
-install(TARGETS scan_preprocessor vehicle_side_estimator plate_observation observation_candidates candidate_stability EXPORT scan_preprocessorTargets
+install(TARGETS scan_preprocessor vehicle_side_estimator plate_observation observation_candidates candidate_stability recovery_preview recovery_contour EXPORT scan_preprocessorTargets
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(TARGETS plate_detector LIBRARY DESTINATION lib)
 install(DIRECTORY "${ONNXRUNTIME_ROOT}/lib/" DESTINATION lib FILES_MATCHING PATTERN "libonnxruntime.so*")
 install(FILES "${ONNXRUNTIME_ROOT}/LICENSE" "${ONNXRUNTIME_ROOT}/ThirdPartyNotices.txt"
   DESTINATION share/${PROJECT_NAME}/third_party/onnxruntime)
-install(TARGETS scan_preprocessor_node vehicle_side_estimator_node plate_observation_node plate_image_probe observation_candidates_node observation_candidate_stabilizer_node
+install(TARGETS scan_preprocessor_node vehicle_side_estimator_node plate_observation_node plate_image_probe observation_candidates_node observation_candidate_stabilizer_node recovery_preview_node
   DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/mock_recovery_request.py DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch config rviz docs DESTINATION share/${PROJECT_NAME})
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
@@ -119,6 +135,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_observation_candidates observation_candidates)
   ament_add_gtest(test_candidate_stability test/test_candidate_stability.cpp)
   target_link_libraries(test_candidate_stability candidate_stability)
+  ament_add_gtest(test_recovery_preview test/test_recovery_preview.cpp)
+  target_link_libraries(test_recovery_preview recovery_preview)
+  ament_add_gtest(test_recovery_contour test/test_recovery_contour.cpp)
+  target_link_libraries(test_recovery_contour recovery_contour)
 endif()
 
 ament_export_targets(scan_preprocessorTargets HAS_LIBRARY_TARGET)
