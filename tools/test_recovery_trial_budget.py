@@ -26,6 +26,19 @@ class TranslationBudgetTests(unittest.TestCase):
         self.assertLess(budget['outbound']['reserved_wall_sec'], 100.)
         self.assertGreater(budget['required_wall_sec'], 100.)
 
+    def test_opposite_diagonal_keeps_round_trip_margin_at_slow_clock(self):
+        # Recorded opposite-side geometry: time reserve, not spatial/speed limits,
+        # prevented departure at 0.247 simulation seconds per wall second.
+        start=(.96279,.172765,.002563)
+        target=(1.46567,1.81399,-.16381)
+        def assess(session, rate=.24691):
+            return assess_translation_budget(start,target,start,
+                remaining_wall_sec=session-8.3-46., baseline_rate=rate,
+                recent_rate=.24885, per_leg_wall_limit_sec=220.)
+        self.assertEqual(assess(480.)['reason'],'insufficient_session_budget')
+        self.assertTrue(assess(540.)['feasible'])
+        self.assertEqual(assess(540.,.20)['reason'],'per_leg_wall_limit')
+
     def test_slow_recent_or_baseline_rate_is_used(self):
         recent_slow = self.budget(baseline_rate=.5, recent_rate=.3)
         baseline_slow = self.budget(baseline_rate=.3, recent_rate=.5)

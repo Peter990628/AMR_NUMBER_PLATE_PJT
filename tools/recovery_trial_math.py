@@ -12,8 +12,56 @@ def preview_allows_frozen_target(valid, status, frozen):
     return bool(valid) or (frozen and status in FROZEN_TARGET_PERCEPTION_MISSES)
 
 
+def guard_graph_ready(input_subscribers, output_publishers, guard_name):
+    """Wait for both independently discovered guard endpoints; reject rivals.
+
+    A partially discovered guard is not a competing controller. This helper
+    is for bounded startup with zero commands only, never for ongoing motion.
+    """
+    for names in (input_subscribers, output_publishers):
+        # DDS can expose an endpoint before its node-name metadata arrives.
+        # Keep waiting with zero commands; it is never sufficient for readiness.
+        if len(names) > 1 or any(name not in (guard_name, '_NODE_NAME_UNKNOWN_') for name in names):
+            raise ValueError('unexpected_guard_endpoint:' + repr(names))
+    return input_subscribers == [guard_name] and output_publishers == [guard_name]
+
+
+def validate_trial_motion(target_fixed, preparing, linear, angular):
+    """Preparation may wait for contour association, but can only issue zeros."""
+    if (linear != 0. or angular != 0.) and (preparing or not target_fixed):
+        raise ValueError('motion_before_target_confirmation')
+
+
 def finite_pose(p):
     return len(p) == 3 and all(math.isfinite(v) for v in p)
+
+
+def bounded_setup_target(current, offset):
+    """Small manual starting-layout perturbation, NOT a perception-derived goal.
+
+    Offset is forward metres, left metres, yaw degrees in the current base frame.
+    The caller must retain live clearance, freshness and command-guard checks.
+    """
+    if not finite_pose(current) or not finite_pose(offset):
+        raise ValueError('nonfinite_setup_pose')
+    forward, left, degrees = offset
+    if not .05 <= math.hypot(forward, left) <= .5 or abs(degrees) > 20:
+        raise ValueError('setup_offset_outside_bound')
+    c, s = math.cos(current[2]), math.sin(current[2])
+    return (current[0]+c*forward-s*left, current[1]+s*forward+c*left,
+            angle(current[2]+math.radians(degrees)))
+
+
+def validate_rotation_return(initial, saved_final, current):
+    """Allow only a small unfinished yaw return after a stopped experiment."""
+    if not all(finite_pose(p) for p in (initial, saved_final, current)):
+        raise ValueError('nonfinite_return_pose')
+    if math.dist(current[:2], saved_final[:2]) > .03 or abs(angle(current[2]-saved_final[2])) > math.radians(2):
+        raise ValueError('return_scene_changed')
+    if math.dist(current[:2], initial[:2]) > .03:
+        raise ValueError('return_not_near_start')
+    if abs(angle(current[2]-initial[2])) > math.radians(60):
+        raise ValueError('return_yaw_outside_bound')
 
 
 def angle(v):

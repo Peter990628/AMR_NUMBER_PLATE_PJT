@@ -47,6 +47,19 @@ ROS_DOMAIN_ID=89 ROS_LOCALHOST_ONLY=1 python3 src/amr_reobservation/test/smoke_r
 
 프로젝트 루트의 `tools/run_recovery_trial.py`는 정지 상태의 관측으로 시험할 후보를 고정하고, 요청한 경우 Isaac Sim에서 순서대로 이동하여 번호판 관측 품질을 비교하는 실험 도구다. **기본 실행은 선택·기록만 수행한다. `--execute`를 붙였을 때만 실제 시뮬레이터에 속도 명령을 보낸다.** 일반 주행 서비스나 Nav2 목표 생성기는 아니다.
 
+CFV 차량 축을 사용하는 제한 시험은 `--cfv-inference-report` 옵션으로 연결한다.
+현재 Play에서 수집한 정지 영상 3장의 일관성과 시각·좌표·요청을 확인한 뒤,
+새 LiDAR preview에서 확인된 앞뒤 면 후보 한 개를 선택한다.
+[수집·추론·시험 명령과 11월 18일 결과](docs/cfv_orientation_test.md#현재-play-데이터로-재개-2026-11-18)를 참고한다.
+
+시작 배치를 바꾼 뒤 새 2.0m 목표를 계산하는 시험은 `--cfv-fresh-close`를 함께 사용한다.
+이전 성공 목표를 다시 방문하는 `--repeat-view-reference`와 달리, 새 CFV 축과 현재 확인된
+LiDAR 표면에서 목표를 생성하고 10초 관측 후 이번 출발점으로 복귀한다.
+두 모드는 함께 사용할 수 없다. 시작 배치 변경 절차와 고정 차량 힌트 처리 방법은
+[실험 기록](docs/cfv_orientation_test.md#시작-위치각도-변경-후-새-목표-계산-11월-18일)에 설명했다.
+수동 시작 배치 변경은 `--setup-local-offset FORWARD_M LEFT_M YAW_DEG`로 최대 0.5m / ±20°까지
+지정하며 변경한 자리에서 정지한다. 이것은 재관측 후보 선택과 별도의 시험 준비 동작이다.
+
 실패 배치를 열어 Play하고, 위의 `recovery_preview.launch.py`와 [번호판 관측 노드](docs/stage3_plate_observation.md)를 실행한다. `/clock`, `/chassis/odom`, 관측 LiDAR와 전후방 기본 LiDAR, `/plate/observation`, `/reobservation/request`, `/reobservation/preview`가 필요하다. 처음 실행할 때 기본 mock의 차량 힌트는 **원래 실패 위치의 AMR 자세에서 한 번** `odom`으로 고정된다. 다른 속도 제어기는 종료한 상태에서 실험한다.
 
 새 ROS 터미널에서 다음과 같이 선택 결과만 먼저 기록할 수 있다. 출력 경로는 아직 없는 디렉터리를 사용한다.

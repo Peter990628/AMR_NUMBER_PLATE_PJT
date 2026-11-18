@@ -3,6 +3,63 @@ import unittest
 from recovery_trial_math import PoseController, RotationController, segment_clearance, preview_allows_frozen_target
 
 class TrialMathTests(unittest.TestCase):
+    def test_stationary_preparation_never_permits_nonzero_commands(self):
+        from recovery_trial_math import validate_trial_motion
+        for fixed in (False,True):
+            validate_trial_motion(fixed,True,0.,0.)
+            for v,w in ((.07,0.),(0.,.2),(.07,.2)):
+                with self.assertRaises(ValueError):validate_trial_motion(fixed,True,v,w)
+
+    def test_motion_needs_fixed_target_even_after_preparation(self):
+        from recovery_trial_math import validate_trial_motion
+        with self.assertRaises(ValueError):validate_trial_motion(False,False,.07,0.)
+        validate_trial_motion(True,False,.07,.2)
+
+    def test_guard_discovery_accepts_either_endpoint_arrival_order(self):
+        from recovery_trial_math import guard_graph_ready
+        for inputs,outputs in [([],[]),(['guard'],[]),([],['guard']),
+                               (['_NODE_NAME_UNKNOWN_'],['guard']),
+                               (['guard'],['_NODE_NAME_UNKNOWN_'])]:
+            self.assertFalse(guard_graph_ready(inputs,outputs,'guard'))
+        self.assertTrue(guard_graph_ready(['guard'],['guard'],'guard'))
+
+    def test_guard_discovery_rejects_competitor_before_full_discovery(self):
+        from recovery_trial_math import guard_graph_ready
+        for inputs,outputs in [([],['teleop']),(['other'],[]),(['guard'],['guard','teleop'])]:
+            with self.subTest(inputs=inputs,outputs=outputs),self.assertRaises(ValueError):
+                guard_graph_ready(inputs,outputs,'guard')
+
+    def test_guard_discovery_rejects_duplicate_node_names(self):
+        from recovery_trial_math import guard_graph_ready
+        for inputs,outputs in [(['guard','guard'],['guard']),(['guard'],['guard','guard'])]:
+            with self.assertRaises(ValueError):guard_graph_ready(inputs,outputs,'guard')
+
+    def test_manual_setup_offset_is_base_relative_and_bounded(self):
+        from recovery_trial_math import bounded_setup_target
+        p=bounded_setup_target((1,2,math.pi/2),(.2,-.2,10))
+        self.assertAlmostEqual(p[0],1.2)
+        self.assertAlmostEqual(p[1],2.2)
+        self.assertAlmostEqual(p[2],math.radians(100))
+        for v in ((.501,0,0),(.4,.4,0),(.2,0,21),(float('nan'),0,0),(0,0,10)):
+            with self.subTest(v=v),self.assertRaises(ValueError):
+                bounded_setup_target((0,0,0),v)
+
+    def test_half_metre_setup_preserves_heading_and_controller_reaches_it(self):
+        from recovery_trial_math import bounded_setup_target, angle
+        initial=(.28,-.23,.23)
+        target=bounded_setup_target(initial,(-.3,.4,0))
+        self.assertAlmostEqual(math.dist(initial[:2],target[:2]),.5)
+        self.assertEqual(target[2],initial[2])
+        controller=PoseController(target);x,y,yaw=initial
+        for _ in range(6000):
+            v,w=controller.command((x,y,yaw))
+            x+=v*math.cos(yaw)*.02;y+=v*math.sin(yaw)*.02;yaw=angle(yaw+w*.02)
+            self.assertLessEqual(math.dist(initial[:2],(x,y)),.55)
+            if controller.phase=='done':break
+        self.assertEqual(controller.phase,'done')
+        self.assertLess(math.dist(target[:2],(x,y)),.021)
+        self.assertLess(abs(angle(yaw-initial[2])),math.radians(1.2))
+
     def test_rotation_never_translates_to_correct_xy_drift(self):
         c=RotationController((.1,.2,.4))
         for pose in [(0.,0.,0.),(.09,.21,.2),(1.,3.,.4)]:
@@ -50,4 +107,15 @@ class TrialMathTests(unittest.TestCase):
         self.assertEqual(c.phase,'done')
         self.assertLess(math.hypot(x-target[0],y-target[1]),.021)
         self.assertLess(abs(yaw-target[2]),.022)
+class ReturnValidationTests(unittest.TestCase):
+    def test_only_near_start_unchanged_stopped_pose_can_finish_yaw(self):
+        from recovery_trial_math import validate_rotation_return
+        validate_rotation_return((0,0,0),(.016,0,.75),(.016,0,.75))
+        for initial,saved,current in [
+                ((0,0,0),(.04,0,.75),(.04,0,.75)),
+                ((0,0,0),(0,0,.75),(.02,0,.85)),
+                ((0,0,0),(0,0,1.1),(0,0,1.1)),
+                ((0,0,0),(0,0,.75),(float('nan'),0,.75))]:
+            with self.assertRaises(ValueError): validate_rotation_return(initial,saved,current)
+
 if __name__=='__main__': unittest.main()

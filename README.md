@@ -8,6 +8,7 @@ Isaac Sim과 ROS 2를 이용한 C++ AMR 번호판 재관측 프로젝트. 번호
 - [`ros2_ws/src/amr_reobservation`](ros2_ws/src/amr_reobservation/README.md): C++ 코드, 빌드·실행 방법, 테스트, 파라미터 설명.
 - [2단계 실행·알고리즘 설명](ros2_ws/src/amr_reobservation/docs/stage2_vehicle_side.md): 측면 후보, 방향·길이·잔차, ROS 메시지와 RViz 표시.
 - [3단계 실행·모델 준비·판정 기준](ros2_ws/src/amr_reobservation/docs/stage3_plate_observation.md): C++ 번호판 검출, 상태 메시지, 디버그 영상 및 입력 타임아웃.
+- [CFV 관측 방향 모델 시험](ros2_ws/src/amr_reobservation/docs/cfv_orientation_test.md): 원본/crop 비교, 차량 축과 LiDAR를 이용한 후보 선택 및 현재 ROS 입력으로 제한 이동·복귀 비교. 11월 18일 한 후보 실행은 완료했으나 번호판 검출은 회복되지 않음.
 - [4단계 평행 배치 검증](ros2_ws/src/amr_reobservation/docs/stage4_parallel_candidates.md): 관측 후보 기하, RViz 표시, 실측 결과와 남은 제약.
 - [4단계 회전 비교](ros2_ws/src/amr_reobservation/docs/stage4_rotation_check.md): +10° 자세 → 평행 및 평행 → −10° 평균 비교 통과. 원본 후보의 순간 점프를 별도로 기록했다.
 - [4단계 연속 관측 확인](ros2_ws/src/amr_reobservation/docs/stage4_candidate_stability.md): 원본 시각의 `odom` TF로 급변을 검사하고, 확인된 현재 후보만 출력한다. −10°·평행·+10° 정지 자세의 평균 비교와 급변 거부·재확인을 검증했다. 원본 측면 추정의 간헐적 무효화는 개선 과제로 남아 있다.

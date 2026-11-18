@@ -19,6 +19,7 @@ os.environ['RMW_IMPLEMENTATION'] = 'rmw_fastrtps_cpp'
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+from recovery_trial_math import guard_graph_ready
 
 
 def values(msg):
@@ -74,7 +75,10 @@ def main():
                  '--max-angular', str(max_angular)], stdout=self.log,
                 stderr=subprocess.STDOUT, start_new_session=True, env=dict(os.environ))
             children.append(self)
-            wait_for(lambda: self.messages and node.count_subscribers(self.input) == 1)
+            wait_for(lambda: self.messages and guard_graph_ready(
+                [p.node_name for p in node.get_subscriptions_info_by_topic(self.input)],
+                [p.node_name for p in node.get_publishers_info_by_topic(self.output)],
+                self.node_name))
             require(all(all(v == 0. for v in msg) for _, msg in self.messages),
                     'Nonzero before receiving any request')
 

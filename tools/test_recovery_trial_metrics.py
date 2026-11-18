@@ -33,6 +33,18 @@ def fill(window, statuses, *, start_ns=1_100_000_000, step_ns=100_000_000):
 
 
 class ObservationWindowTests(unittest.TestCase):
+    def test_extended_window_counts_late_dropout_and_waits_full_ten_seconds(self):
+        window=ObservationWindow(1_000_000_000,min_span_sec=10.)
+        for i in range(401):
+            stamp=1_100_000_000+i*25_000_000
+            window.add(observation(stamp,'not_detected' if i==300 else 'usable'),stamp+10_000_000,10+i*.1)
+            if i<400:self.assertFalse(window.summary()['complete'])
+        result=window.summary()
+        self.assertTrue(result['complete'])
+        self.assertEqual(result['sample_count'],401)
+        self.assertEqual(result['status_counts'],{'usable':400,'not_detected':1})
+        self.assertEqual(result['longest_usable_run'],300)
+
     def test_empty_and_not_detected_windows_are_distinct(self):
         window = ObservationWindow(1_000_000_000)
         self.assertFalse(window.summary()['complete'])

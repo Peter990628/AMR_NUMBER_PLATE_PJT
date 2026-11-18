@@ -32,11 +32,13 @@ class MockRecoveryRequest(Node):
         self.approach_y = self.param('approach_y_in_anchor_base_m', 0.0)
         self.approach_yaw = math.radians(self.param('approach_yaw_from_anchor_deg', 0.0))
         self.lifetime = self.param('valid_for_sec', 300.0)
+        self.wall_lifetime = self.param('max_wall_age_sec', 300.0)
         self.reason = self.param('failure_reason', 'not_detected')
         self.target_id = self.param('target_id', 'manual_failure_vehicle')
         numbers = (self.hint_x, self.hint_y, self.approach_x,
-                   self.approach_y, self.approach_yaw, self.lifetime)
+                   self.approach_y, self.approach_yaw, self.lifetime, self.wall_lifetime)
         if (not all(math.isfinite(x) for x in numbers) or not 0 < self.lifetime <= 600
+                or not 0 < self.wall_lifetime <= 600
                 or not self.fixed or not self.base or self.fixed == self.base
                 or math.hypot(self.hint_x, self.hint_y) < 0.01):
             raise ValueError('Invalid mock context parameters')
@@ -127,7 +129,7 @@ class MockRecoveryRequest(Node):
                 'Vehicle heading unknown; repeated publications keep this same stamp.')
         age = (now - Time.from_msg(self.request.header.stamp,
                                   clock_type=now.clock_type)).nanoseconds / 1e9
-        if age > self.lifetime or time.monotonic() - self.anchor_wall > 300:
+        if age > self.lifetime or time.monotonic() - self.anchor_wall > self.wall_lifetime:
             if not self.expired_logged:
                 self.get_logger().warning('Mock context expired; restart for a new trial')
                 self.expired_logged = True
