@@ -64,15 +64,21 @@ def run(args):
     args.output.mkdir(parents=True)
     started=time.monotonic()
     prior_path=args.retry_report or args.return_only_report
+    single_ocr = bool(getattr(args, 'single_ocr_config', None))
+    ocr_session = None
+    if single_ocr:
+        from recovery_ocr_session import RecoveryOCRSession
+        from recovery_ocr_policy import run_once
+        ocr_session = RecoveryOCRSession(args.single_ocr_config, args.output)
     prior=json.loads(prior_path.read_text()) if prior_path else None
     context_record=prior or (json.loads(args.context_report.read_text()) if args.context_report else None)
     cfv_context=load_context(args.cfv_inference_report) if args.cfv_inference_report else None
     reference_path=args.repeat_view_reference or args.cfv_close_reference
     close_reference=json.loads(reference_path.read_text()) if reference_path else None
     repeat_view=bool(args.repeat_view_reference)
-    view_mode=args.cfv_view_c or args.cfv_fresh_close or bool(close_reference)
+    view_mode=args.cfv_view_c or args.cfv_fresh_close or bool(close_reference) or single_ocr
     extended_observation=repeat_view or args.cfv_fresh_close
-    view_limits=CLOSE_LIMITS if close_reference or args.cfv_fresh_close else VIEW_LIMITS
+    view_limits=CLOSE_LIMITS if close_reference or args.cfv_fresh_close or single_ocr else VIEW_LIMITS
     target_radius=view_limits['target_radius_m'] if view_mode else .51
     # A manual 0.5m lateral setup needs turn/drive/align at the same low speeds.
     # Only its one-leg deadline changes; trial goals and spatial guards stay bounded.
@@ -81,12 +87,12 @@ def run(args):
             'baseline':None,'selection':None,'trials':[], 'recovered':False,
             'comparison':{'rotation_only':args.rotation_only,
                 'translation_comparison':args.translation_comparison,'required_aims':args.required_aims,
-                'cfv_axis_comparison':bool(cfv_context), 'cfv_view_c':view_mode,
+                'cfv_axis_comparison':bool(cfv_context) or single_ocr, 'cfv_view_c':view_mode,
                 'camera_range_target_m':view_limits['camera_range_m'] if view_mode else None,
                 'distance_reference_report':str(reference_path) if close_reference else None,
-                'repeat_view':repeat_view,'fresh_close_view':args.cfv_fresh_close,
+                'repeat_view':repeat_view,'fresh_close_view':args.cfv_fresh_close or single_ocr,
                 'setup_local_offset':args.setup_local_offset,
-                'trial_observation_sim_sec':10. if extended_observation else 1.},
+                'trial_observation_sim_sec':None if single_ocr else 10. if extended_observation else 1.},
             'motion_limits':{'max_linear_m_s':0. if args.rotation_only else .07,'max_angular_rad_s':.25,
                 'footprint_circle_m':1.2,'radius_from_start_m':.03 if args.rotation_only else view_limits['motion_radius_m'] if view_mode else .55,
                 'target_radius_m':target_radius, 'per_leg_wall_sec':leg_seconds,'max_session_wall_sec':args.max_seconds},
@@ -95,6 +101,14 @@ def run(args):
                 'Usable is the existing detection/quality proxy, not OCR success.']}
     if cfv_context:
         result['cfv_context']={k:v for k,v in cfv_context.items() if k!='reference_preview'}
+    if single_ocr:
+        result['limitations'] = ['Single simulated vehicle; no initial approach or general navigation.',
+            'OCR agreement is not ground-truth accuracy or proof of target identity.',
+            'Observed LiDAR clearance does not certify unobserved free space.']
+        result['success'] = False
+        result['text'] = None
+        result['candidate_attempts'] = 0
+        result['ocr_window_wall_sec'] = 4.
     streams=(args.output/'events.jsonl').open('w')
     def event(kind, **data):
         row=clean(dict(kind=kind,wall_sec=time.monotonic()-started,**data))
@@ -185,6 +199,11 @@ def run(args):
             request=latest['request'][1]
             identity=(request.request_id,stamp_ns(request.header))
             if not request.enabled: raise RuntimeError('request_disabled')
+            if single_ocr:
+                if request.header.frame_id != 'odom': raise RuntimeError('request_frame_not_odom')
+                for topic in ('/plate/observation', '/reobservation/request', '/reobservation/preview'):
+                    if len(node.get_publishers_info_by_topic(topic)) != 1:
+                        raise RuntimeError('ambiguous_publisher_'+topic)
             if active_request[0] is not None and identity!=active_request[0]: raise RuntimeError('request_changed')
             if active_request_body[0] is not None and message_to_ordereddict(request)!=active_request_body[0]:
                 raise RuntimeError('request_body_changed')
@@ -342,7 +361,7 @@ def run(args):
 
         def select_candidates():
             # Keep every 6 x 3 preview pair until translation geometry is ranked.
-            selector=CandidateSelector(SelectionConfig(max_trials=18)) if args.translation_comparison else CandidateSelector()
+            selector=CandidateSelector(SelectionConfig(max_trials=18)) if args.translation_comparison or single_ocr else CandidateSelector()
             seen=set(); select_started=time.monotonic(); deadline=select_started+12
             best_count=0; best_improving_count=0; last_selection_reason=None
             while time.monotonic()<deadline:
@@ -352,7 +371,7 @@ def run(args):
                     if key in seen: continue
                     seen.add(key)
                     selected=selector.observe(p,now_ros_sec=now_ns()/1e9,now_wall_sec=time.monotonic())
-                    chosen=(choose_view_snapshot(selected,p,cfv_context,now_ns()/1e9,close_reference,repeat_view,args.cfv_fresh_close) if view_mode else
+                    chosen=(choose_view_snapshot(selected,p,cfv_context,now_ns()/1e9,close_reference,repeat_view,args.cfv_fresh_close or single_ocr) if view_mode else
                         choose_cfv_snapshot(selected,p,cfv_context,now_ns()/1e9) if cfv_context else
                         choose_translation_snapshot(selected,p,required_aims=args.required_aims,
                         max_trials=args.max_trials) if args.translation_comparison else
@@ -451,10 +470,15 @@ def run(args):
                     return [v.double_value for v in values]
                 finally: node.destroy_client(client)
             preview_wall=read_limits('/recovery_preview',['request_timeout_sec'])[0]
-            mock_wall,mock_ros=read_limits('/mock_recovery_request',['max_wall_age_sec','valid_for_sec'])
-            validate_view_leases(preview_wall,mock_wall,mock_ros)
-            result['view_lease_parameters']={'preview_wall_sec':preview_wall,
-                'mock_wall_sec':mock_wall,'mock_ros_sec':mock_ros}
+            if single_ocr:
+                if not math.isfinite(preview_wall) or preview_wall < args.max_seconds:
+                    raise RuntimeError('insufficient_preview_lease')
+                result['view_lease_parameters']={'preview_wall_sec':preview_wall}
+            else:
+                mock_wall,mock_ros=read_limits('/mock_recovery_request',['max_wall_age_sec','valid_for_sec'])
+                validate_view_leases(preview_wall,mock_wall,mock_ros)
+                result['view_lease_parameters']={'preview_wall_sec':preview_wall,
+                    'mock_wall_sec':mock_wall,'mock_ros_sec':mock_ros}
             event('view_lease_preflight',**result['view_lease_parameters'])
         if args.execute:
             guard_log=(args.output/'guard.log').open('w')
@@ -481,6 +505,61 @@ def run(args):
         return_target=tuple(close_reference['initial_pose']) if repeat_view else initial[0]
         result['return_target_pose']=list(return_target)
         safe=clearance(initial[0]); event('ready',initial_pose=initial[0],observed_clearance_m=safe)
+        if single_ocr:
+            # One explicitly bounded recovery: OCR first; fresh CFV only if needed;
+            # one candidate; OCR decides the outcome; hold at the final pose.
+            result['return_target_pose'] = None
+            def state(name):
+                result['stage'] = name
+                event('recovery_state', state=name)
+                write_json(args.output/'report.json', result)
+            def stationary_pump(anchor):
+                def pump():
+                    command(); spin(.04); health()
+                    p = current(); twist = latest['odom'][1].twist.twist
+                    if (math.dist(p[:2], anchor[:2]) > .01 or abs(angle(p[2]-anchor[2])) > .01
+                            or abs(twist.linear.x) > .015 or abs(twist.angular.z) > .025):
+                        raise RuntimeError('motion_during_ocr_preparation')
+                return pump
+            def observe(phase):
+                stationary(.35)
+                decision = ocr_session.observe(phase, stationary_pump(current()))
+                result[phase+'_ocr'] = decision
+                event('ocr_decision', phase=phase, decision=decision)
+                return decision
+            def prepare():
+                nonlocal cfv_context
+                path = ocr_session.prepare(stationary_pump(current()))
+                cfv_context = load_context(path)
+                result['cfv_context'] = {k:v for k,v in cfv_context.items() if k!='reference_preview'}
+            def select():
+                try:
+                    chosen = select_candidates()
+                except RuntimeError as error:
+                    if str(error) != 'insufficient_aim_diversity': raise
+                    return None
+                result['selection'] = chosen
+                write_json(args.output/'selection.json', chosen)
+                event('selected', selection=chosen)
+                return chosen['queue'][0] if chosen.get('queue') else None
+            def move_once(candidate):
+                target = pose_dict(candidate['base_pose'])
+                # Reserve the stopped OCR phase. No return leg in recovery mode.
+                rate = recent_clock_rate()
+                budget = assess_translation_budget(current(), target, target,
+                    baseline_rate=rate, recent_rate=rate,
+                    remaining_wall_sec=max(0., args.max_seconds-(time.monotonic()-started)-60.),
+                    per_leg_wall_limit_sec=leg_seconds)
+                result['budget_assessments'] = [budget]
+                if not budget['feasible']: raise RuntimeError('insufficient_recovery_budget')
+                frozen[0] = True
+                result['candidate_attempts'] = 1
+                result['trials'].append({'candidate':candidate, 'target':list(target), 'label':'ocr_candidate'})
+                move(target, 'ocr_candidate')  # existing scan-time TF, sweep and live guards
+            decision = run_once(observe, prepare, select, move_once, state, execute=args.execute)
+            result.update(decision, recovered=decision['success'],
+                          verification_status='ocr_consensus_without_ground_truth')
+            return result
         if args.setup_local_offset:
             # Change only the experimental starting layout; never present this
             # manually specified move as an AI-generated observation candidate.
@@ -609,6 +688,8 @@ def run(args):
         return result
     except (Exception,KeyboardInterrupt) as exc:
         result['status']='aborted'; result['error']=str(exc) or type(exc).__name__
+        if single_ocr:
+            result.update(success=False, recovered=False, text=None)
         event('aborted',error=result['error'])
         return result
     finally:
@@ -624,6 +705,9 @@ def run(args):
                 guard.wait(timeout=3)
             except Exception as exc: result['guard_cleanup_error']=str(exc)
             result['guard_exit_code']=guard.poll()
+            if single_ocr and (result.get('guard_cleanup_error') or guard.poll()!=0):
+                result.update(status='aborted', success=False, recovered=False, text=None,
+                              error='command_guard_cleanup_failed')
         if node is not None and rclpy.ok():
             try: spin(.3)  # Read post-stop odometry after the guard's final zeros.
             except Exception: pass
@@ -654,6 +738,7 @@ if __name__=='__main__':
     mode_group.add_argument('--rotation-only',action='store_true',help='Compare all selected aims using zero linear velocity, then return yaw')
     mode_group.add_argument('--translation-comparison',action='store_true',help='Rank fresh translations by observed surface incidence gain; measure then return regardless of usable proxy')
     mode_group.add_argument('--cfv-inference-report',type=Path,help='Three fresh stationary CFV images; rank new previews by end-face axis, try one translation and return')
+    mode_group.add_argument('--single-ocr-config',type=Path,help='One recovery using fresh CFV and truth-free OCR; hold final pose, no automatic return')
     mode_group.add_argument('--setup-local-offset',type=float,nargs=3,metavar=('FORWARD_M','LEFT_M','YAW_DEG'),help='Manual start-layout change only, <=0.5m/20deg, then stop there; no AI candidate selection')
     view_group=parser.add_mutually_exclusive_group()
     view_group.add_argument('--cfv-view-c',action='store_true',help='Generate reviewed 45deg / 2.5m view from fresh confirmed surface; CFV input required, one bounded round trip')
@@ -664,6 +749,11 @@ if __name__=='__main__':
     parser.add_argument('--max-trials',type=int,help='Default:1 for translation comparison, otherwise4')
     parser.add_argument('--max-seconds',type=float)
     a=parser.parse_args()
+    if a.single_ocr_config:
+        if (a.retry_report or a.context_report or a.return_only_report or a.cfv_view_c or a.cfv_fresh_close
+                or a.cfv_close_reference or a.repeat_view_reference or a.max_trials not in (None,1)):
+            parser.error('single OCR recovery requires fresh context and exactly one candidate')
+        a.required_aims=1; a.max_trials=1
     if a.setup_local_offset:
         if a.retry_report or a.context_report or a.return_only_report:
             parser.error('setup cannot reuse a saved context')
@@ -675,8 +765,8 @@ if __name__=='__main__':
             parser.error('return-only cannot be combined with another trial mode')
         a.rotation_only=True; a.required_aims=1; a.max_trials=1
     if (a.cfv_view_c or a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference) and not a.cfv_inference_report: parser.error('view comparisons require --cfv-inference-report')
-    view_session_cap=(CLOSE_LIMITS if a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference else VIEW_LIMITS)['session_wall_sec']
-    if a.max_seconds is None: a.max_seconds=120. if a.return_only_report else view_session_cap if a.cfv_view_c or a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference else 260.
+    view_session_cap=(CLOSE_LIMITS if a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference or a.single_ocr_config else VIEW_LIMITS)['session_wall_sec']
+    if a.max_seconds is None: a.max_seconds=120. if a.return_only_report else view_session_cap if a.cfv_view_c or a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference or a.single_ocr_config else 260.
     if a.cfv_inference_report:
         if a.retry_report or a.context_report:
             parser.error('CFV comparison requires the current request, not a saved retry context')
@@ -684,12 +774,13 @@ if __name__=='__main__':
         a.required_aims=1
         if a.max_trials not in (None,1): parser.error('CFV comparison is limited to one translation')
     if a.max_trials is None: a.max_trials=1 if a.translation_comparison else 4
-    cap=120 if a.return_only_report else view_session_cap if a.cfv_view_c or a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference else 280
+    cap=120 if a.return_only_report else view_session_cap if a.cfv_view_c or a.cfv_fresh_close or a.cfv_close_reference or a.repeat_view_reference or a.single_ocr_config else 280
     if not 1<=a.max_trials<=8 or not 30<=a.max_seconds<=cap: parser.error('invalid bounded trial limits')
     if a.translation_comparison and a.max_trials>3: parser.error('translation comparison supports at most3 trials')
-    if not a.return_only_report and not a.setup_local_offset and ((not a.cfv_inference_report and not 2<=a.required_aims<=3) or (not a.translation_comparison and a.required_aims>a.max_trials)):
+    if not a.single_ocr_config and not a.return_only_report and not a.setup_local_offset and ((not a.cfv_inference_report and not 2<=a.required_aims<=3) or (not a.translation_comparison and a.required_aims>a.max_trials)):
         parser.error('required-aims must be2..3 and <=max-trials except in translation comparison')
     if a.retry_report and (a.rotation_only or a.translation_comparison):
         parser.error('comparison needs fresh selection; use context-report, not retry-report')
     r=run(a)
-    sys.exit(1 if r['status']=='aborted' else 0)
+    sys.exit((0 if r.get('success') else 1 if r['status']=='aborted' else 2) if a.single_ocr_config
+             else 1 if r['status']=='aborted' else 0)
