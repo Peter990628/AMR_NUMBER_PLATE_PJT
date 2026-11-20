@@ -77,14 +77,17 @@ class RecoveryOCRSession:
         c = self.config
         start = time.monotonic()
         capture = self.output/'cfv_capture'
-        child_job([c['ros_python'], ROOT/'tools/capture_recovery_snapshot.py', '--seconds', '18',
-                   '--samples', '3', '--output', capture], self.output/'cfv_capture.log', 25, pump)
+        # Low real-time factor and intermittent confirmed contours can delay the
+        # third pair. Keep all association gates, but stop as soon as it arrives.
+        child_job([c['ros_python'], ROOT/'tools/capture_recovery_snapshot.py', '--seconds', '30',
+                   '--samples', '3', '--stop-when-complete', '--output', capture],
+                  self.output/'cfv_capture.log', 35, pump)
         inference = self.output/'cfv_inference'
         child_job(['systemd-run', '--user', '--scope', '-p', 'MemoryMax=2G', '-p', 'MemorySwapMax=0',
                    c['ros_python'], ROOT/'tools/probe_cfv_orientation.py', '--upstream', c['cfv_upstream'],
                    '--checkpoint', c['cfv_checkpoint'], '--deps', c['cfv_deps'],
                    '--manifest', capture/'samples.json', '--threads', '2', '--output', inference],
-                  self.output/'cfv_inference.log', max(1, 45-(time.monotonic()-start)), pump)
-        if time.monotonic()-start > 45:
+                   self.output/'cfv_inference.log', max(1, 60-(time.monotonic()-start)), pump)
+        if time.monotonic()-start > 60:
             raise RuntimeError('cfv_preparation_timeout')
         return inference/'report.json'

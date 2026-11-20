@@ -62,6 +62,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=25)
     parser.add_argument('--samples', type=int, default=3)
+    parser.add_argument('--stop-when-complete', action='store_true',
+                        help='Finish immediately after all associated samples are saved')
     args = parser.parse_args()
     if args.output.exists() or not 5 <= args.seconds <= 60 or not 1 <= args.samples <= 6:
         parser.error('Use a new output folder, 5..60 seconds and 1..6 samples')
@@ -151,6 +153,8 @@ def main():
     print('Read-only sensor/TF audit started', flush=True)
     try:
         while time.monotonic() - started < args.seconds:
+            if args.stop_when_complete and len(saved) >= args.samples:
+                break
             rclpy.spin_once(node, timeout_sec=.02)
             if rollback:
                 raise RuntimeError('Simulation clock went backwards during capture')

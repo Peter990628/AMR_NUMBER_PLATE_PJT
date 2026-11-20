@@ -44,6 +44,12 @@ def write_json(path, value):
     path.write_text(json.dumps(clean(value), indent=2, allow_nan=False)+'\n')
 
 
+def observe_buffered_preview(selector, preview, receipt_wall_sec, now_ros_sec):
+    """Preserve arrival gaps while checking source age at processing time."""
+    return selector.observe(preview, now_ros_sec=now_ros_sec,
+                            now_wall_sec=receipt_wall_sec)
+
+
 def run(args):
     import rclpy
     from rclpy.node import Node
@@ -370,7 +376,12 @@ def run(args):
                     key=(p['header']['stamp']['sec'],p['header']['stamp']['nanosec'])
                     if key in seen: continue
                     seen.add(key)
-                    selected=selector.observe(p,now_ros_sec=now_ns()/1e9,now_wall_sec=time.monotonic())
+                    # Inline inference receives previews throughout preparation.
+                    # Those historical frames cannot confirm a newly inferred axis;
+                    # start the confirmation streak at the latest CFV image time.
+                    if single_ocr and key[0]*10**9+key[1] < cfv_context['image_stamp_ns']:
+                        continue
+                    selected=observe_buffered_preview(selector,p,receipt,now_ns()/1e9)
                     chosen=(choose_view_snapshot(selected,p,cfv_context,now_ns()/1e9,close_reference,repeat_view,args.cfv_fresh_close or single_ocr) if view_mode else
                         choose_cfv_snapshot(selected,p,cfv_context,now_ns()/1e9) if cfv_context else
                         choose_translation_snapshot(selected,p,required_aims=args.required_aims,
