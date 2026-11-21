@@ -20,7 +20,7 @@ from probe_paddle_plate_ocr import write_json
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--trial-id', required=True, type=identifier)
-    parser.add_argument('--phase', required=True, choices=['before', 'after', 'returned'])
+    parser.add_argument('--phase', required=True, choices=['before', 'corner', 'after', 'returned'])
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--seconds', type=float, default=10.)
     parser.add_argument('--hz', type=float, default=2.)
@@ -283,7 +283,7 @@ def main():
             if listing.wait_for_service(timeout_sec=1.):
                 request = ListParameters.Request(); request.depth = 0
                 future = listing.call_async(request)
-                rclpy.spin_until_future_complete(node, future, timeout_sec=1.)
+                rclpy.spin_until_future_complete(node, future, timeout_sec=3.)
                 if future.done() and future.result() is not None:
                     names = future.result().result.names
                     if not getter.wait_for_service(timeout_sec=1.):
@@ -291,7 +291,7 @@ def main():
                         continue
                     request = GetParameters.Request(); request.names = names
                     answer = getter.call_async(request)
-                    rclpy.spin_until_future_complete(node, answer, timeout_sec=1.)
+                    rclpy.spin_until_future_complete(node, answer, timeout_sec=3.)
                     if answer.done() and answer.result() is not None:
                         params[name] = {k: as_dict(v) for k, v in zip(names, answer.result().values)}
                     else:

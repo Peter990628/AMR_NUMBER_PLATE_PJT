@@ -3,8 +3,8 @@ import copy
 import math
 
 from cfv_trial_selection import validate_context
-from evaluate_cfv_axis_recovery import rank_snapshot, rotate, xy, yaw
-from review_recovery_positions import aim_from_camera, same_side_camera, geometry_metrics
+from evaluate_cfv_axis_recovery import confirmed_patches, rotate, xy, yaw
+from review_recovery_positions import add, aim_from_camera, geometry_metrics, scale, sub
 from cfv_axis_geometry import axis_error_deg
 from evaluate_cfv_axis_recovery import stamp
 
@@ -14,6 +14,23 @@ LIMITS = {'target_radius_m': 1.5, 'motion_radius_m': 1.6,
           'incidence_deg': 45., 'camera_range_m': 2.5}
 CLOSE_LIMITS = {**LIMITS, 'target_radius_m': 1.75, 'motion_radius_m': 1.85,
                 'per_leg_wall_sec': 220., 'session_wall_sec': 540., 'camera_range_m': 2.0}
+CREATE3_AFTER_CORNER_LIMITS = {**CLOSE_LIMITS, 'target_radius_m': 2.30, 'motion_radius_m': 2.40}
+# Deadband for the projection of the center hint onto the observed end's axis.
+MIN_CENTER_END_PROJECTION_M = 0.30
+
+
+def view_rejection(metrics, limits):
+    if metrics['incidence_deg'] >= 90:
+        return 'view_on_inward_side'
+    if not .05 <= metrics['translation_m'] <= limits['target_radius_m']:
+        return 'view_target_outside_bound'
+    if metrics['angular_gain_deg'] < 10:
+        return 'view_insufficient_gain'
+    if abs(metrics['final_yaw_change_deg']) > 60:
+        return 'view_excessive_final_yaw'
+    if metrics['vehicle_return_envelope_margin_m'] < 0:
+        return 'view_vehicle_clearance'
+    return None
 
 
 def distance_reference(reference, preview, anchor, context, repeat=False):
@@ -68,7 +85,8 @@ def validate_view_leases(preview_wall, mock_wall, mock_ros):
         raise ValueError('view_requires_600s_preview_and_mock_leases')
 
 
-def choose_view_snapshot(selection, preview, context, now_ros_sec, close_reference=None, repeat=False, fresh_close=False):
+def choose_view_snapshot(selection, preview, context, now_ros_sec, close_reference=None, repeat=False,
+                         fresh_close=False, *, limits=None):
     if fresh_close and (close_reference is not None or repeat):
         raise ValueError('fresh_view_cannot_reuse_reference')
     result = {'status': 'collecting', 'queue': [], 'diagnostics': copy.deepcopy(selection['diagnostics'])}
@@ -80,8 +98,8 @@ def choose_view_snapshot(selection, preview, context, now_ros_sec, close_referen
     validate_context(context, preview, now_ros_sec)
     if selection['status'] != 'ready':
         return result
-    ranked = rank_snapshot(preview, selection, context['axis_xy_odom'])
-    end_indices = {p['aim_index'] for p in ranked['patches'] if p['label'] == 'end_face_hypothesis'}
+    patches = confirmed_patches(preview, selection, context['axis_xy_odom'])
+    end_indices = {p['aim_index'] for p in patches if p['label'] == 'end_face_hypothesis'}
     anchors = [c for c in selection['queue'] if c['aim_index'] in end_indices
                and math.dist(xy(c['base_pose']['position']), xy(preview['current_pose']['position'])) < 1e-6]
     if len(anchors) != 1:
@@ -101,33 +119,57 @@ def choose_view_snapshot(selection, preview, context, now_ros_sec, close_referen
     scene = {'current': (*xy(preview['current_pose']['position']), yaw(preview['current_pose'])),
              'axis': context['axis_xy_odom'], 'camera0': xy(anchor['camera_position']),
              'aim': xy(anchor['look_at']), 'contour': [xy(p) for p in preview['contour_points']]}
-    limits = CLOSE_LIMITS if close_reference or fresh_close else LIMITS
+    if limits is None:
+        limits = CLOSE_LIMITS if close_reference or fresh_close else LIMITS
     if close_reference:
-        axis, aim, camera, evidence = distance_reference(close_reference,preview,anchor,context,repeat)
+        axis, aim, saved_camera, evidence = distance_reference(close_reference,preview,anchor,context,repeat)
         scene.update(axis=axis,aim=aim)
         result['diagnostics']['distance_comparison'] = evidence
     else:
-        camera = same_side_camera(scene['axis'], scene['camera0'], scene['aim'],
-                                  limits['incidence_deg'], limits['camera_range_m'])
         result['diagnostics']['fresh_view'] = {
             'axis_xy_odom': list(scene['axis']), 'aim_xy_odom': list(scene['aim']),
             'camera_range_target_m': limits['camera_range_m'],
             'meaning': 'Recomputed from current confirmed surface and fresh CFV; no saved goal or aim.'}
-    pose, camera = aim_from_camera(camera, scene['aim'], offset, alpha)
+    center = xy(preview['vehicle_hint'])
+    unit_axis = scale(scene['axis'], 1 / math.hypot(*scene['axis']))
+    separation = sum(a*b for a, b in zip(sub(scene['aim'], center), unit_axis))
+    evidence = {'center_xy_odom': center, 'aim_xy_odom': scene['aim'],
+                'target_radius_m': limits['target_radius_m'],
+                'center_end_projection_m': abs(separation),
+                'min_center_end_projection_m': MIN_CENTER_END_PROJECTION_M, 'branches': []}
+    result['diagnostics']['outward_view'] = evidence
+    if not math.isfinite(separation) or abs(separation) < MIN_CENTER_END_PROJECTION_M:
+        result['status'] = 'view_ambiguous_end_direction'
+        return result
+    normal = scale(unit_axis, 1 if separation > 0 else -1)
+    evidence['normal_xy_odom'] = normal
+    if close_reference:
+        cameras = [saved_camera]
+    else:
+        theta = math.radians(limits['incidence_deg'])
+        cameras = [add(scene['aim'], scale(rotate(normal, turn), limits['camera_range_m']))
+                   for turn in (-theta, theta)]
+    for camera in cameras:
+        pose, camera = aim_from_camera(camera, scene['aim'], offset, alpha)
+        metrics = geometry_metrics(scene, pose, camera, outward_normal=normal)
+        evidence['branches'].append({'base_pose_xy_yaw': pose, 'camera_xy_odom': camera,
+                                     'metrics': metrics, 'rejection': view_rejection(metrics, limits)})
+    # An infeasible nearer branch must not mask a reachable one. When both fail,
+    # report the nearer branch's reason and retain both assessments for inspection.
+    branch = min(evidence['branches'], key=lambda b: (b['rejection'] is not None,
+                 b['metrics']['translation_m'], abs(b['metrics']['final_yaw_change_deg'])))
+    metrics = branch['metrics']
+    result['diagnostics']['view_C'] = metrics
+    if branch['rejection']:
+        result['status'] = branch['rejection']
+        return result
+    pose, camera = branch['base_pose_xy_yaw'], branch['camera_xy_odom']
+    evidence['selected_camera_xy_odom'] = camera
     if repeat:
         saved = close_reference['selection']['queue'][0]['base_pose']
         if (math.dist(pose[:2],xy(saved['position'])) > 1e-4
                 or abs(math.remainder(pose[2]-yaw(saved),2*math.pi)) > 1e-4):
             raise ValueError('repeat_target_changed')
-    metrics = geometry_metrics(scene, pose, camera)
-    result['diagnostics']['view_C'] = metrics
-    reason = ('view_target_outside_bound' if not .05 <= metrics['translation_m'] <= limits['target_radius_m'] else
-              'view_insufficient_gain' if metrics['angular_gain_deg'] < 10 else
-              'view_excessive_final_yaw' if abs(metrics['final_yaw_change_deg']) > 60 else
-              'view_vehicle_clearance' if metrics['vehicle_return_envelope_margin_m'] < 0 else None)
-    if reason:
-        result['status'] = reason
-        return result
     candidate = copy.deepcopy(anchor)
     candidate.update(label=anchor['aim_label']+('/view_C_45deg_2.0m' if close_reference or fresh_close else '/view_C_45deg_2.5m'),
                      generated_pose=True, source_anchor=copy.deepcopy(anchor),

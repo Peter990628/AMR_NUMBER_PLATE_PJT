@@ -6,6 +6,8 @@ plate_observation:
     debug_topic: /debug/plate_observation
     # Supplied explicitly through the launch model_path argument.
     model_path: ''
+    rtmdet_score_threshold: 0.50
+    # Legacy YOLO input and output settings.
     input_size: 640
     num_classes: 4
     plate_class_id: 2

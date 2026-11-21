@@ -93,8 +93,8 @@ def decide(capture, rows, policy=None):
     return result
 
 
-def run_once(observe, prepare, select, move, state, *, execute=True):
-    """Shared one-candidate control flow. Exceptions abort; never move on faults."""
+def run_once(observe, prepare, select, move, state, *, execute=True, select_after_probe=None):
+    """One recovery view, optionally reached via one corner observation stop."""
     state('observe_initial')
     before = observe('before')
     if before['success']:
@@ -116,11 +116,27 @@ def run_once(observe, prepare, select, move, state, *, execute=True):
                 'before': before, 'after': None, 'candidate_attempts': 0}
     state('moving')
     move(candidate)
-    state('observe_candidate')
-    after = observe('after')
+    at_corner = select_after_probe is not None and candidate.get('label') == 'corner_probe'
+    state('observe_corner' if at_corner else 'observe_candidate')
+    after = observe('corner' if at_corner else 'after')
     if after['reason'] in FAULT_REASONS:
         raise RuntimeError('candidate_ocr_'+after['reason'])
+    attempts = 1
+    if at_corner and not after['success']:
+        state('prepare_corner_direction')
+        candidate = select_after_probe()
+        if candidate is None:
+            state('no_candidate_after_probe')
+            return dict(status='no_candidate_after_probe', success=False, text=None,
+                        before=before, after=after, candidate_attempts=attempts)
+        state('moving_to_end_face')
+        move(candidate)
+        attempts += 1
+        state('observe_candidate')
+        after = observe('after')
+        if after['reason'] in FAULT_REASONS:
+            raise RuntimeError('candidate_ocr_'+after['reason'])
     state('succeeded' if after['success'] else 'failed')
     return {'status': 'succeeded_after_motion' if after['success'] else 'candidate_exhausted',
             'success': after['success'], 'text': after['text'], 'before': before, 'after': after,
-            'candidate_attempts': 1}
+            'candidate_attempts': attempts}

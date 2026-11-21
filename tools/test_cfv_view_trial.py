@@ -2,7 +2,7 @@ import copy
 import math
 import unittest
 
-from cfv_view_trial import choose_view_snapshot, validate_view_leases
+from cfv_view_trial import CREATE3_AFTER_CORNER_LIMITS, choose_view_snapshot, validate_view_leases
 from recovery_selection import CandidateSelector, SelectionConfig
 from test_recovery_selection import snapshot, pose
 
@@ -28,13 +28,14 @@ class ViewCSelectionTests(unittest.TestCase):
         for values in ((300.,600.,600.),(600.,300.,600.),(600.,600.,300.),(float('nan'),600.,600.)):
             with self.assertRaises(ValueError):validate_view_leases(*values)
 
-    def fixtures(self, aim_y=3):
+    def fixtures(self, aim_y=3, *, current=None, hint_x=3.5, half_span=1.):
         selector=CandidateSelector(SelectionConfig(max_trials=18))
         for t in (10,10.1,10.2):
-            preview=snapshot(t,patches=[(2,aim_y-1,aim_y+1,aim_y)])
+            preview=snapshot(t,patches=[(2,aim_y-half_span,aim_y+half_span,aim_y)],current=current)
+            preview['vehicle_hint']['x']=hint_x
             confirmed=selector.observe(preview,t,t)
         context={'axis_xy_odom':(1,0),'image_stamp_ns':10_150_000_000,
-                 'image_pose':pose(),'reference_preview':copy.deepcopy(preview),
+                 'image_pose':copy.deepcopy(preview['current_pose']),'reference_preview':copy.deepcopy(preview),
                  'max_source_age_sec':30.,'camera_offset_base_xy':(0,0),
                  'camera_forward_yaw_rad':0.}
         return confirmed,preview,context
@@ -82,6 +83,53 @@ class ViewCSelectionTests(unittest.TestCase):
         result=choose_view_snapshot(selected,p,c,10.3,fresh_close=True)
         self.assertEqual(result['status'],'view_target_outside_bound')
         self.assertFalse(result['queue'])
+
+    def test_camera_beside_end_selects_exterior_for_either_car_end(self):
+        for outward in (-1, 1):
+            for camera_inset in (0., .05):
+                start = pose(2 - outward * camera_inset, 1., math.pi/2)
+                selected, p, c = self.fixtures(current=start, hint_x=2 - outward*1.5, half_span=.35)
+                for axis_sign in (-1, 1):
+                    with self.subTest(outward=outward, inset=camera_inset, axis=axis_sign):
+                        c['axis_xy_odom'] = (axis_sign, 0)
+                        result = choose_view_snapshot(selected, p, c, 10.3, fresh_close=True)
+                        self.assertEqual(result['status'], 'ready')
+                        candidate = result['queue'][0]
+                        self.assertAlmostEqual(candidate['camera_position']['x'], 2 + outward*math.sqrt(2))
+                        self.assertAlmostEqual(candidate['camera_position']['y'], 3 - math.sqrt(2))
+                        self.assertGreaterEqual(candidate['cfv_evaluation']['baseline_incidence_deg'], 90)
+
+    def test_create3_wider_second_leg_is_bounded_and_first_leg_stays_local(self):
+        for aim_y, expected in ((3.45, 'ready'), (4., 'view_target_outside_bound')):
+            selected, preview, context = self.fixtures(aim_y)
+            args = (selected, preview, context, 10.3)
+            initial = choose_view_snapshot(*args, fresh_close=True)
+            self.assertEqual(initial['status'], 'view_target_outside_bound')
+            second = choose_view_snapshot(*args, fresh_close=True, limits=CREATE3_AFTER_CORNER_LIMITS)
+            self.assertEqual(second['status'], expected)
+            if expected == 'ready':
+                distance = second['queue'][0]['translation_m']
+                self.assertGreater(distance, 1.75)
+                self.assertLessEqual(distance, 2.30)
+                self.assertEqual(second['diagnostics']['outward_view']['target_radius_m'], 2.30)
+
+    def test_center_without_longitudinal_separation_defers_motion(self):
+        selected, p, c = self.fixtures(hint_x=2.05)
+        result = choose_view_snapshot(selected, p, c, 10.3, fresh_close=True)
+        self.assertEqual(result['status'], 'view_ambiguous_end_direction')
+        self.assertEqual(result['queue'], [])
+        self.assertEqual(result['diagnostics']['outward_view']['branches'], [])
+
+    def test_unreachable_outward_views_do_not_fall_back_to_camera_side(self):
+        selected, p, c = self.fixtures(hint_x=.5)
+        result = choose_view_snapshot(selected, p, c, 10.3, fresh_close=True)
+        self.assertEqual(result['status'], 'view_target_outside_bound')
+        self.assertEqual(result['queue'], [])
+        branches = result['diagnostics']['outward_view']['branches']
+        self.assertEqual(len(branches), 2)
+        for branch in branches:
+            self.assertGreater(branch['camera_xy_odom'][0], 2)
+            self.assertEqual(branch['rejection'], 'view_target_outside_bound')
 
     def test_large_translation_rejected_instead_of_expanding_bound(self):
         selected,p,c=self.fixtures(4)

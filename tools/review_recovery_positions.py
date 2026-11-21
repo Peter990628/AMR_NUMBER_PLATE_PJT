@@ -120,19 +120,25 @@ def make_scene(report, pair):
             'source_geometry_max_error': max_error}
 
 
-def geometry_metrics(scene, pose, camera):
-    before = incidence_to_axis(scene['axis'], scene['camera0'], scene['aim'], scene['camera0'])
-    after = incidence_to_axis(scene['axis'], camera, scene['aim'], scene['camera0'])
-    if not before['valid'] or not after['valid']:
-        raise ValueError('candidate leaves observed end-face side')
+def geometry_metrics(scene, pose, camera, *, outward_normal=None):
+    if outward_normal is None:
+        before = incidence_to_axis(scene['axis'], scene['camera0'], scene['aim'], scene['camera0'])
+        after = incidence_to_axis(scene['axis'], camera, scene['aim'], scene['camera0'])
+        if not before['valid'] or not after['valid']:
+            raise ValueError('candidate leaves observed end-face side')
+        baseline_deg, candidate_deg = before['incidence_deg'], after['incidence_deg']
+    else:
+        normal_yaw = math.atan2(outward_normal[1], outward_normal[0])
+        baseline_deg = abs(math.degrees(angle(bearing(scene['aim'], scene['camera0']) - normal_yaw)))
+        candidate_deg = abs(math.degrees(angle(bearing(scene['aim'], camera) - normal_yaw)))
     current = scene['current']
     relative = rotate(sub(pose[:2], current[:2]), -current[2])
     clearance = segment_clearance(scene['contour'], current[:2], pose[:2])
     return {'translation_m': math.dist(current[:2], pose[:2]),
             'forward_from_start_m': relative[0], 'right_from_start_m': -relative[1],
-            'baseline_incidence_deg': before['incidence_deg'],
-            'incidence_deg': after['incidence_deg'],
-            'angular_gain_deg': before['incidence_deg'] - after['incidence_deg'],
+            'baseline_incidence_deg': baseline_deg,
+            'incidence_deg': candidate_deg,
+            'angular_gain_deg': baseline_deg - candidate_deg,
             'camera_to_aim_m': math.dist(camera, scene['aim']),
             'range_only_scale_ratio': math.dist(scene['camera0'], scene['aim']) / math.dist(camera, scene['aim']),
             'final_yaw_change_deg': math.degrees(angle(pose[2] - current[2])),

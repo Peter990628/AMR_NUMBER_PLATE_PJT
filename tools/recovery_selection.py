@@ -19,6 +19,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from cfv_axis_geometry import classify_patch
+
 
 @dataclass(frozen=True)
 class SelectionConfig:
@@ -130,8 +132,9 @@ class CandidateSelector:
     the live caller must supply both clocks and validate age again before motion.
     """
 
-    def __init__(self, config: SelectionConfig | None = None):
+    def __init__(self, config: SelectionConfig | None = None, *, end_face_axis=None):
         self.config = config or SelectionConfig()
+        self.end_face_axis = end_face_axis
         c = self.config
         if not c.fixed_frame or c.required_observations < 3 or c.max_trials < 1:
             raise ValueError("invalid selection configuration")
@@ -230,6 +233,9 @@ class CandidateSelector:
                 raise ValueError("aim_not_observed")
             if support < c.min_patch_points or length < c.min_patch_length_m or deviation > c.max_patch_deviation_m:
                 diagnostics["rejections"].append({"aim_index": i, "reason": "weak_patch_support"})
+                continue
+            if self.end_face_axis is not None and classify_patch(self.end_face_axis, a, b)['label'] != 'end_face_hypothesis':
+                diagnostics["rejections"].append({"aim_index": i, "reason": "not_end_face"})
                 continue
             patches.append(_Patch(i, point, a, b, ((b[0] - a[0]) / length,
                                                   (b[1] - a[1]) / length),

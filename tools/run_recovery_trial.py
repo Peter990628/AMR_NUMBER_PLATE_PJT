@@ -26,7 +26,7 @@ from recovery_trial_budget import assess_translation_budget
 from recovery_trial_metrics import ObservationWindow, match_measurement_image
 from cfv_trial_selection import load_context, choose_cfv_snapshot
 from cfv_view_trial import choose_view_snapshot, validate_view_leases, LIMITS as VIEW_LIMITS
-from cfv_view_trial import CLOSE_LIMITS
+from cfv_view_trial import CLOSE_LIMITS, CREATE3_AFTER_CORNER_LIMITS
 
 
 def stamp_ns(header):
@@ -49,6 +49,41 @@ def observe_buffered_preview(selector, preview, receipt_wall_sec, now_ros_sec):
     """Preserve arrival gaps while checking source age at processing time."""
     return selector.observe(preview, now_ros_sec=now_ros_sec,
                             now_wall_sec=receipt_wall_sec)
+
+
+def require_live_plate(latest, now_ns, event, *, hold=None):
+    """A stopped base may wait for a newer source image, including a negative detection."""
+    wait_started = None
+    previous_stamp = -1
+    while True:
+        wall = time.monotonic()
+        if wait_started is not None and wall - wait_started >= 3.0:
+            raise RuntimeError('stationary_plate_wait_timeout')
+        sample = latest.get('plate')
+        reason = 'stale_plate'
+        if sample is not None:
+            receipt, msg = sample
+            stamp = stamp_ns(msg.header)
+            age_ns = now_ns() - stamp
+            if age_ns < -100_000_000:
+                raise RuntimeError('source_age_plate')
+            if wall - receipt <= 1.5:
+                if age_ns <= 650_000_000:
+                    if not msg.input_valid:
+                        raise RuntimeError('plate_input_' + msg.status)
+                    if stamp > previous_stamp:
+                        if wait_started is not None:
+                            event('stationary_plate_resumed', waited_wall_sec=wall-wait_started,
+                                  source_stamp_ns=stamp, status=msg.status)
+                        return
+                reason = 'source_age_plate'
+        if hold is None:
+            raise RuntimeError(reason)
+        if wait_started is None:
+            wait_started = wall
+            previous_stamp = stamp if sample is not None else -1
+            event('stationary_plate_wait', reason=reason, timeout_wall_sec=3.0)
+        hold()
 
 
 def run(args):
@@ -88,7 +123,9 @@ def run(args):
     view_mode=args.cfv_view_c or args.cfv_fresh_close or bool(close_reference) or single_ocr
     extended_observation=repeat_view or args.cfv_fresh_close
     view_limits=CLOSE_LIMITS if close_reference or args.cfv_fresh_close or single_ocr else VIEW_LIMITS
-    target_radius=view_limits['target_radius_m'] if view_mode else .51
+    leg_limits = view_limits if view_mode else {'target_radius_m': .51, 'motion_radius_m': .55}
+    if args.rotation_only:
+        leg_limits = {**leg_limits, 'motion_radius_m': .03}
     # A manual 0.5m lateral setup needs turn/drive/align at the same low speeds.
     # Only its one-leg deadline changes; trial goals and spatial guards stay bounded.
     leg_seconds=view_limits['per_leg_wall_sec'] if view_mode else 180. if args.setup_local_offset else 100.
@@ -105,8 +142,8 @@ def run(args):
                 'trial_observation_sim_sec':None if single_ocr else 10. if extended_observation else 1.},
             'motion_limits':{'speed':args.speed, 'max_linear_m_s':0. if args.rotation_only else speeds.linear,
                 'max_angular_rad_s':speeds.angular,
-                'footprint_circle_m':1.2,'radius_from_start_m':.03 if args.rotation_only else view_limits['motion_radius_m'] if view_mode else .55,
-                'target_radius_m':target_radius, 'per_leg_wall_sec':leg_seconds,'max_session_wall_sec':args.max_seconds},
+                'footprint_circle_m':1.2,'radius_from_start_m':leg_limits['motion_radius_m'],
+                'target_radius_m':leg_limits['target_radius_m'], 'per_leg_wall_sec':leg_seconds,'max_session_wall_sec':args.max_seconds},
             'limitations':['Observed obstacle clearance is not certified free space/navigation.',
                 'Aims come from observed LiDAR surfaces; no plate/front/rear ground truth.',
                 'Usable is the existing detection/quality proxy, not OCR success.']}
@@ -179,6 +216,7 @@ def run(args):
         active_request=[None]
         active_request_body=[None]
         initial=[None]
+        corner_origin=None
         frozen=[bool(prior)]
         preparing=[True]
         fixture=[None]
@@ -208,18 +246,17 @@ def run(args):
             if odom.header.frame_id!='odom' or odom.child_frame_id!='base_link':
                 raise RuntimeError('unexpected_odometry_frames')
             return pose_dict(message_to_ordereddict(odom.pose.pose))
-        def health(require_preview=True,allow_contour_miss=False):
+        def check_base_health(require_preview, allow_contour_miss):
             wall=time.monotonic()
             if wall-started>args.max_seconds: raise RuntimeError('session_wall_limit')
             if clock_state['rollback']: raise RuntimeError('clock_rollback')
             if now_ns()<=0 or wall-clock_state['advance_wall']>1.5: raise RuntimeError('clock_stalled')
-            for key,limit in [('odom',1.),('plate',1.5),('request',1.5),
+            for key,limit in [('odom',1.),('request',1.5),
                     *((topic,1.5) for topic in robot.scan_topics)]:
                 if key not in latest or wall-latest[key][0]>limit: raise RuntimeError('stale_'+key)
                 if key!='request':
                     age=(now_ns()-stamp_ns(latest[key][1].header))/1e9
                     if not -.1<=age<=.65: raise RuntimeError('source_age_'+key)
-            if not latest['plate'][1].input_valid: raise RuntimeError('plate_input_'+latest['plate'][1].status)
             request=latest['request'][1]
             identity=(request.request_id,stamp_ns(request.header))
             if not request.enabled: raise RuntimeError('request_disabled')
@@ -244,7 +281,8 @@ def run(args):
                     raise RuntimeError('preview_'+p.status)
                 if active_request[0] and (p.request_id,stamp_ns(p.request_header))!=active_request[0]:
                     raise RuntimeError('preview_request_changed')
-            if initial[0] is not None and math.dist(current()[:2],initial[0][:2])>result['motion_limits']['radius_from_start_m']:
+            leg_origin = corner_origin or initial[0]
+            if leg_origin is not None and math.dist(current()[:2],leg_origin[:2])>leg_limits['motion_radius_m']:
                 raise RuntimeError('motion_radius_exceeded')
             if guard:
                 if guard.poll() is not None: raise RuntimeError('command_guard_exited')
@@ -254,6 +292,24 @@ def run(args):
                 subs=node.get_subscriptions_info_by_topic('/cmd_vel')
                 if len(subs)!=1 or subs[0].node_name != robot.twist_subscriber:
                     raise RuntimeError('simulation_subscriber_changed')
+        def check_stationary(anchor):
+            p = current()
+            if (math.dist(p[:2], anchor[:2]) > .01 or abs(angle(p[2]-anchor[2])) > .01
+                    or measured_speeds[0] > .015 or measured_speeds[1] > .025):
+                raise RuntimeError('motion_during_ocr_preparation')
+        def health(require_preview=True, allow_contour_miss=False, *, numbered_ocr=False):
+            check_base_health(require_preview, allow_contour_miss)
+            if numbered_ocr:
+                return  # Numbered frames have their own source-age and identity checks.
+            if single_ocr and initial[0] is not None and preparing[0] and last_command == [0., 0.]:
+                anchor = current()
+                def hold():
+                    command(); spin(.04)
+                    check_base_health(require_preview, allow_contour_miss)
+                    check_stationary(anchor)
+                require_live_plate(latest, now_ns, event, hold=hold)
+            else:
+                require_live_plate(latest, now_ns, event)
         def observed_points(only_observation=False,save_label=None):
             points=[]
             evidence=[]
@@ -360,11 +416,11 @@ def run(args):
             return s
         def move(target,label):
             if not frozen[0]: raise RuntimeError('move_without_fixed_target')
-            preparing[0]=False
             if args.rotation_only and math.dist(target[:2],initial[0][:2])>.01:
                 raise RuntimeError('rotation_target_xy_changed')
-            if math.dist(target[:2],initial[0][:2])>target_radius: raise RuntimeError('target_outside_local_trial')
+            if math.dist(target[:2],(corner_origin or initial[0])[:2])>leg_limits['target_radius_m']: raise RuntimeError('target_outside_local_trial')
             health(); safe=clearance(target,save_label=label)
+            preparing[0]=False
             event('motion_start',label=label,target=target,clearance_m=safe)
             controller=RotationController(target) if args.rotation_only else PoseController(target, speed=args.speed)
             deadline=time.monotonic()+leg_seconds
@@ -399,11 +455,13 @@ def run(args):
                 spin(.04)
             command(); event('motion_arrived',label=label,actual_pose=current(),min_clearance_m=min_clearance)
 
-        def select_candidates():
+        def select_candidates(*, end_face_only=False):
             # Keep every 6 x 3 preview pair until translation geometry is ranked.
-            selector=CandidateSelector(SelectionConfig(max_trials=18)) if args.translation_comparison or single_ocr else CandidateSelector()
+            selector=CandidateSelector(SelectionConfig(max_trials=18) if args.translation_comparison or single_ocr else None,
+                                       end_face_axis=cfv_context['axis_xy_odom'] if end_face_only else None)
             seen=set(); select_started=time.monotonic(); deadline=select_started+12
             best_count=0; best_improving_count=0; last_selection_reason=None
+            last_rejected_view = None
             while time.monotonic()<deadline:
                 spin(.08); health(allow_contour_miss=True)
                 for receipt,p in list(previews):
@@ -416,7 +474,8 @@ def run(args):
                     if single_ocr and key[0]*10**9+key[1] < cfv_context['image_stamp_ns']:
                         continue
                     selected=observe_buffered_preview(selector,p,receipt,now_ns()/1e9)
-                    chosen=(choose_view_snapshot(selected,p,cfv_context,now_ns()/1e9,close_reference,repeat_view,args.cfv_fresh_close or single_ocr) if view_mode else
+                    chosen=(choose_view_snapshot(selected,p,cfv_context,now_ns()/1e9,close_reference,repeat_view,
+                        args.cfv_fresh_close or single_ocr,limits=leg_limits) if view_mode else
                         choose_cfv_snapshot(selected,p,cfv_context,now_ns()/1e9) if cfv_context else
                         choose_translation_snapshot(selected,p,required_aims=args.required_aims,
                         max_trials=args.max_trials) if args.translation_comparison else
@@ -426,18 +485,27 @@ def run(args):
                     if cfv_context:
                         best_improving_count=max(best_improving_count,len(chosen.get('queue',[])))
                         last_selection_reason=chosen['status']
+                        outward_view = chosen['diagnostics'].get('outward_view')
+                        if outward_view is not None and not chosen['queue']:
+                            last_rejected_view = {'header': p['header'], 'status': chosen['status'],
+                                                  'outward_view': outward_view}
                     elif args.translation_comparison:
                         diagnostics=chosen.get('diagnostics',{}).get('translation',{})
                         best_improving_count=max(best_improving_count,diagnostics.get('available_aims',0))
                         last_selection_reason=diagnostics.get('reason')
-                    if chosen.get('queue'):
+                    if chosen.get('queue') and (not end_face_only or p['header'] == previews[-1][1]['header']):
                         source=chosen['queue'][0]['header']['stamp']
                         if not -.1<=now_ns()/1e9-source['sec']-source['nanosec']/1e9<=.5:
                             raise RuntimeError('selected_snapshot_stale')
                         chosen['selection_wall_sec']=time.monotonic()-select_started
                         return chosen  # Freeze immediately; later single-aim frames cannot overwrite it.
             event('selection_incomplete',required_aims=args.required_aims,best_confirmed_aims=best_count,
-                best_improving_aims=best_improving_count,last_reason=last_selection_reason)
+                best_improving_aims=best_improving_count,last_reason=last_selection_reason,
+                last_rejected_view=last_rejected_view)
+            if end_face_only:
+                return {'status':'no_candidate_after_probe', 'queue':[],
+                        'best_confirmed_end_faces':best_count, 'last_reason':last_selection_reason,
+                        'last_rejected_view':last_rejected_view}
             raise RuntimeError('insufficient_translation_candidates' if args.translation_comparison else 'insufficient_aim_diversity')
 
         # A retry is a NEW explicit fixed-odom fixture, never a lease extension or
@@ -552,50 +620,53 @@ def run(args):
         safe=clearance(initial[0]); event('ready',initial_pose=initial[0],observed_clearance_m=safe)
         if single_ocr:
             # One explicitly bounded recovery: OCR first; fresh CFV only if needed;
-            # one candidate; OCR decides the outcome; hold at the final pose.
+            # A side-only corner stop may precede the final OCR viewpoint.
             result['return_target_pose'] = None
             def state(name):
                 result['stage'] = name
                 event('recovery_state', state=name)
                 write_json(args.output/'report.json', result)
-            def stationary_pump(anchor):
+            def stationary_pump(anchor, *, numbered_ocr=False):
                 def pump():
-                    command(); spin(.04); health()
-                    p = current()
-                    if (math.dist(p[:2], anchor[:2]) > .01 or abs(angle(p[2]-anchor[2])) > .01
-                            or measured_speeds[0] > .015 or measured_speeds[1] > .025):
-                        raise RuntimeError('motion_during_ocr_preparation')
+                    command(); spin(.04); health(numbered_ocr=numbered_ocr)
+                    check_stationary(anchor)
                 return pump
             def observe(phase):
+                if phase == 'corner':
+                    preparing[0] = True
+                    frozen[0] = False
                 stationary(.35)
-                decision = ocr_session.observe(phase, stationary_pump(current()))
+                decision = ocr_session.observe(phase, stationary_pump(current(), numbered_ocr=True))
                 result[phase+'_ocr'] = decision
                 event('ocr_decision', phase=phase, decision=decision)
                 return decision
-            def prepare():
+            def prepare(*, at_corner=False):
                 nonlocal cfv_context
-                path = ocr_session.prepare(stationary_pump(current()))
-                cfv_context = load_context(path)
-                result['cfv_context'] = {k:v for k,v in cfv_context.items() if k!='reference_preview'}
+                cutoff = now_ns() if at_corner else None
+                output = args.output/'after_corner' if at_corner else args.output
+                path = ocr_session.prepare(stationary_pump(current()), output=output)
+                cfv_context = load_context(path, after_stamp_ns=cutoff)
+                result['corner_cfv_context' if at_corner else 'cfv_context'] = {
+                    k:v for k,v in cfv_context.items() if k!='reference_preview'}
+            def select_probe(beyond_corner_m, wait_sec):
+                from corner_probe import wait_for_corner_probe
+                event('corner_probe_observe', beyond_corner_m=beyond_corner_m, wait_sec=wait_sec)
+                probe = wait_for_corner_probe(previews, cfv_context, lambda: now_ns()/1e9,
+                                              stationary_pump(current()), wait_sec=wait_sec,
+                                              beyond_corner_m=beyond_corner_m,
+                                              target_radius_m=leg_limits['target_radius_m'])
+                if probe is None:
+                    event('corner_probe_unconfirmed', beyond_corner_m=beyond_corner_m,
+                          last_preview_status=previews[-1][1]['status'] if previews else None)
+                    return None
+                return {'status': 'confirmed_corner_probe', 'queue': [probe]}
             def select():
                 if args.corner_probe_plus_30cm:
-                    from corner_probe import confirmed_corner_probe
-                    deadline = time.monotonic() + 12.
-                    while time.monotonic() < deadline:
-                        spin(.08)
-                        health(allow_contour_miss=True)
-                        probe = confirmed_corner_probe(previews, cfv_context, now_ns()/1e9,
-                                                       time.monotonic(), plus_30cm=True)
-                        if probe is not None:
-                            break
-                    else:
-                        event('corner_probe_unconfirmed', beyond_corner_m=.65)
-                        return None
-                    chosen = {'status': 'confirmed_corner_probe', 'queue': [probe]}
+                    chosen = select_probe(.65, 12.)
                 else:
                     chosen = select_recovery_or_probe()
-                    if chosen is None:
-                        return None
+                if chosen is None:
+                    return None
                 result['selection'] = chosen
                 write_json(args.output/'selection.json', chosen)
                 event('selected', selection=chosen)
@@ -607,14 +678,31 @@ def run(args):
                     if str(error) != 'insufficient_aim_diversity': raise
                     if not args.corner_probe_once:
                         return None
-                    from corner_probe import confirmed_corner_probe
-                    probe = confirmed_corner_probe(previews, cfv_context, now_ns()/1e9, time.monotonic(),
-                                                   beyond_corner_m=args.corner_probe_once)
-                    if probe is None:
-                        event('corner_probe_unconfirmed')
-                        return None
-                    chosen = {'status': 'confirmed_corner_probe', 'queue': [probe]}
+                    return select_probe(args.corner_probe_once, 3.)
                 return chosen
+            def select_after_probe():
+                nonlocal corner_origin, leg_limits
+                # The first move finished and the corner OCR window checked stationarity.
+                corner_origin = current()
+                result['corner_origin'] = list(corner_origin)
+                limits = result['motion_limits']
+                limits['initial_target_radius_m'] = leg_limits['target_radius_m']
+                limits['initial_motion_radius_m'] = leg_limits['motion_radius_m']
+                if args.robot == 'create3':
+                    leg_limits = CREATE3_AFTER_CORNER_LIMITS
+                limits['target_radius_m'] = leg_limits['target_radius_m']
+                limits['radius_from_leg_origin_m'] = leg_limits['motion_radius_m']
+                limits['radius_from_start_m'] = math.dist(initial[0][:2], corner_origin[:2]) + leg_limits['motion_radius_m']
+                previews.clear()
+                prepare(at_corner=True)
+                state('select_corner_end_face')
+                chosen = select_candidates(end_face_only=True)
+                result['corner_selection'] = chosen
+                write_json(args.output/'after_corner/selection.json', chosen)
+                if not chosen['queue']:
+                    return None
+                event('selected_after_probe', selection=chosen)
+                return chosen['queue'][0]
             def move_once(candidate):
                 target = pose_dict(candidate['base_pose'])
                 # Reserve the stopped OCR phase. No return leg in recovery mode.
@@ -623,14 +711,17 @@ def run(args):
                     baseline_rate=rate, recent_rate=rate,
                     remaining_wall_sec=max(0., args.max_seconds-(time.monotonic()-started)-60.),
                     per_leg_wall_limit_sec=leg_seconds, speed=args.speed)
-                result['budget_assessments'] = [budget]
+                result.setdefault('budget_assessments', []).append(budget)
                 if not budget['feasible']: raise RuntimeError('insufficient_recovery_budget')
                 frozen[0] = True
-                result['candidate_attempts'] = 1
+                result['candidate_attempts'] += 1
                 label = 'corner_probe' if candidate.get('label') == 'corner_probe' else 'ocr_candidate'
                 result['trials'].append({'candidate':candidate, 'target':list(target), 'label':label})
                 move(target, label)  # existing scan-time TF, sweep and live guards
-            decision = run_once(observe, prepare, select, move_once, state, execute=args.execute)
+            decision = run_once(observe, prepare, select, move_once, state, execute=args.execute,
+                                select_after_probe=select_after_probe if args.corner_probe_once else None)
+            if result.get('corner_ocr') and 'after_ocr' not in result:
+                result['after_ocr'] = result['corner_ocr']
             result.update(decision, recovered=decision['success'],
                           verification_status='ocr_consensus_without_ground_truth')
             return result

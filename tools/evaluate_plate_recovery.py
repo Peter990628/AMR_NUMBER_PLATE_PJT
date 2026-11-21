@@ -31,7 +31,7 @@ def load_captures(paths):
         if capture.get('schema') != SCHEMA or capture.get('source_kind') != 'raw_camera':
             raise ValueError('Not a raw evaluation capture: '+str(path))
         identifier(capture['trial_id'])
-        if capture['phase'] not in ('before','after','returned'):
+        if capture['phase'] not in ('before','corner','after','returned'):
             raise ValueError('Invalid phase')
         samples = capture['samples']
         count = capture['sampling']['count']

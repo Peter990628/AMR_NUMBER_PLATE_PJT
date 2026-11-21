@@ -58,6 +58,9 @@ class CFVTrialSelectionTests(unittest.TestCase):
             path.write_text(json.dumps({'samples': [{}, {}, {}]}))
             with patch('cfv_trial_selection.evaluate_sample', side_effect=results):
                 self.assertEqual(load_context(path)['image_stamp_ns'], 12 * 10**9)
+            with patch('cfv_trial_selection.evaluate_sample', side_effect=results):
+                with self.assertRaisesRegex(ValueError, 'before_corner'):
+                    load_context(path, after_stamp_ns=10 * 10**9)
             for kind in ('stamp', 'axis', 'request', 'pose'):
                 changed = copy.deepcopy(results)
                 if kind == 'stamp': changed[1][1]['image_stamp_ns'] = 10 * 10**9

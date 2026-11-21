@@ -13,12 +13,14 @@ from evaluate_cfv_axis_recovery import file_info, rank_snapshot, stamp, xy, yaw
 from evaluate_cfv_snapshots import evaluate_sample
 
 
-def load_context(path):
+def load_context(path, *, after_stamp_ns=None):
     inference = json.loads(path.read_text())
     evaluated = [evaluate_sample(sample) for sample in inference['samples']]
     if len(evaluated) != 3:
         raise ValueError('cfv_requires_three_images')
     stamps = [pair['image_stamp_ns'] for _, pair in evaluated]
+    if after_stamp_ns is not None and min(stamps) <= after_stamp_ns:
+        raise ValueError('cfv_image_before_corner_observation')
     if len(set(stamps)) != 3 or stamps != sorted(stamps) or stamps[-1] - stamps[0] > 10 * 10**9:
         raise ValueError('cfv_invalid_image_window')
     axes = [report['axis_yaw_deg_odom_mod180'] for report, _ in evaluated]

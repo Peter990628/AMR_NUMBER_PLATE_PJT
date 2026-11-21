@@ -17,6 +17,7 @@ struct PlateDetectorConfig
   int inference_threads{2};
   double score_threshold{0.25};
   double nms_iou_threshold{0.45};
+  double rtmdet_score_threshold{0.50};
 };
 
 struct LetterboxGeometry

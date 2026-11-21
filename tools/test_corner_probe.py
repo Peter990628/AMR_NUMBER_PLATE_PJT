@@ -1,8 +1,9 @@
 import copy
 import math
 import unittest
+from unittest.mock import patch
 
-from corner_probe import confirmed_corner_probe
+from corner_probe import confirmed_corner_probe, wait_for_corner_probe
 
 
 def point(x, y):
@@ -51,6 +52,31 @@ class CornerProbeTest(unittest.TestCase):
         frames[1][1]['valid'] = False
         self.assertIsNone(self.select(frames))
 
+    def test_wait_after_ambiguous_scan_requires_three_new_confirmations(self):
+        for recover in (True, False):
+            with self.subTest(recover=recover):
+                frames = self.frames()
+                wall, source = frames[-1][0], 10.2
+                def append_scan(valid):
+                    nonlocal wall, source
+                    wall += .25
+                    source += .1
+                    p = copy.deepcopy(self.preview)
+                    ns = round(source*1e9)
+                    p['header']['stamp'] = {'sec': ns//10**9, 'nanosec': ns%10**9}
+                    p['valid'] = valid
+                    frames.append((wall, p))
+                append_scan(False)
+                with patch('corner_probe.time.monotonic', side_effect=lambda: wall):
+                    probe = wait_for_corner_probe(frames, self.ctx, lambda: source,
+                                                  lambda: append_scan(recover), wait_sec=3.,
+                                                  beyond_corner_m=.35, target_radius_m=1.75)
+                if recover:
+                    self.assertEqual(probe['support_stamps_ns'], [10_400_000_000, 10_500_000_000, 10_600_000_000])
+                else:
+                    self.assertIsNone(probe)
+                    self.assertEqual(len(frames), 4 + 12)
+
     def test_shorter_overrun_uses_the_same_travel_limit(self):
         self.preview['current_pose'] = copy.deepcopy(self.preview['current_pose'])
         self.ctx['image_pose'] = self.preview['current_pose']
@@ -60,6 +86,17 @@ class CornerProbeTest(unittest.TestCase):
         self.assertAlmostEqual(goal['evidence']['step_m'], 1.45)
         self.preview['current_pose']['position']['y'] = 1.4
         self.assertIsNone(confirmed_corner_probe(self.frames(), self.ctx, 10.24, 20.64, beyond_corner_m=.15))
+
+    def test_recovery_radius_allows_beyond_corner_without_exceeding_total_limit(self):
+        self.preview["current_pose"] = copy.deepcopy(self.preview["current_pose"])
+        self.ctx["image_pose"] = self.preview["current_pose"]
+        self.preview['current_pose']['position']['y'] = 1.3
+        def select():
+            return confirmed_corner_probe(self.frames(), self.ctx, 10.24, 20.64,
+                                          beyond_corner_m=.35, target_radius_m=1.75)
+        self.assertAlmostEqual(select()['evidence']['step_m'], 1.65)
+        self.preview['current_pose']['position']['y'] = 1.45
+        self.assertIsNone(select())
 
     def test_comparison_adds_30cm_and_obeys_existing_close_view_radius(self):
         normal = self.select(self.frames())['evidence']

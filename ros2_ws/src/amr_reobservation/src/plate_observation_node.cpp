@@ -34,6 +34,7 @@ public:
     const auto model_path = parameter<std::string>("model_path", "");
     PlateDetectorConfig d;
     d.input_size = parameter("input_size", 640);
+    d.rtmdet_score_threshold = parameter("rtmdet_score_threshold", 0.5);
     d.num_classes = parameter("num_classes", 4);
     d.plate_class_id = parameter("plate_class_id", 2);
     d.inference_threads = parameter("inference_threads", 2);
@@ -64,9 +65,13 @@ public:
     detector_ = std::make_unique<PlateDetector>(model_path, d);
     publisher_ = create_publisher<Output>(result, rclcpp::QoS(1));
     image_publisher_ = create_publisher<sensor_msgs::msg::Image>(debug, rclcpp::SensorDataQoS().keep_last(1));
+    // Keep ROS parameter services responsive while a camera frame is in inference.
+    image_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    rclcpp::SubscriptionOptions image_options;
+    image_options.callback_group = image_group_;
     subscription_ = create_subscription<sensor_msgs::msg::Image>(
       input, rclcpp::SensorDataQoS().keep_last(1),
-      [this](sensor_msgs::msg::Image::ConstSharedPtr image) {on_image(image);});
+      [this](sensor_msgs::msg::Image::ConstSharedPtr image) {on_image(image);}, image_options);
     // Dedicated callback group and a two-thread executor keep the watchdog runnable during inference.
     watchdog_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     inspect_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -310,7 +315,7 @@ private:
   rclcpp::Publisher<Output>::SharedPtr publisher_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_publisher_;
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
-  rclcpp::CallbackGroup::SharedPtr watchdog_group_;
+  rclcpp::CallbackGroup::SharedPtr image_group_, watchdog_group_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 }  // namespace amr_reobservation

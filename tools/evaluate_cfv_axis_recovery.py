@@ -41,8 +41,8 @@ def file_info(path):
     return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def rank_snapshot(preview, confirmed, axis):
-    """Rank confirmed existing poses using a frozen axis, without changing poses."""
+def confirmed_patches(preview, confirmed, axis):
+    """Verify candidate provenance before classifying the observed surfaces."""
     if confirmed['status'] != 'ready':
         raise ValueError('Confirmed snapshot must be ready')
     for entry in confirmed['queue']:
@@ -62,6 +62,12 @@ def rank_snapshot(preview, confirmed, axis):
     for i, (a, b) in enumerate(zip(preview['aim_endpoint_a'], preview['aim_endpoint_b'])):
         patches.append({'aim_index': i, 'aim_label': preview['aim_labels'][i],
                         **classify_patch(axis, xy(a), xy(b))})
+    return patches
+
+
+def rank_snapshot(preview, confirmed, axis):
+    """Rank confirmed existing poses using a frozen axis, without changing poses."""
+    patches = confirmed_patches(preview, confirmed, axis)
     metrics = []
     for entry in confirmed['queue']:
         i = entry['aim_index']

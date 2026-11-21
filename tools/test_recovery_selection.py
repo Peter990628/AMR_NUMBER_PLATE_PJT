@@ -71,6 +71,18 @@ def snapshot(t=10.0, patches=None, request_id="request", current=None):
 
 
 class SelectorTests(unittest.TestCase):
+    def test_corner_confirmation_requires_consecutive_end_faces(self):
+        selector = CandidateSelector(end_face_axis=(1., 0.))
+        for i in range(6):
+            msg = snapshot(10. + .1*i)
+            if i == 2:
+                # Same midpoint/length, but horizontal (side) instead of vertical.
+                msg['aim_endpoint_a'] = [point(2., 0.)]
+                msg['aim_endpoint_b'] = [point(4., 0.)]
+            result = self.observe(selector, msg)
+            self.assertEqual(bool(result['queue']), i == 5)
+        self.assertEqual(result['queue'][0]['confirmation']['observations'], 3)
+
     def test_configuration_rejects_unbounded_or_nonsensical_values(self):
         for config in (SelectionConfig(required_observations=2),
                        SelectionConfig(max_trials=2.5),

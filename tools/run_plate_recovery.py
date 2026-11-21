@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-command, one-candidate Isaac recovery ending on a truth-free OCR decision.
+"""One-command Isaac recovery with an optional corner stop before the OCR viewpoint.
 
 No --execute: check local dependencies and print configuration; no ROS or motion.
 --execute: own detector/preview/controller lifetimes, hold final pose, return JSON.
@@ -70,7 +70,7 @@ def main():
                         help='Explicit manual vehicle-hint fixture; otherwise require upstream RecoveryRequest')
     parser.add_argument('--preview-params', type=Path,
                         default=ROOT/'ros2_ws/src/amr_reobservation/config/recovery_preview.yaml')
-    parser.add_argument('--model-path', type=Path, default=ROOT/'assets/models/semi_allimages_v5n.onnx')
+    parser.add_argument('--model-path', type=Path, default=ROOT/'assets/models/plate_kr_rtmdet_v4.onnx')
     parser.add_argument('--config', type=Path, help='JSON overriding local model/interpreter paths')
     args = parser.parse_args()
     robot = SIMULATION_ROBOTS[args.robot]
@@ -96,7 +96,7 @@ def main():
                           'corner_probe_plus_30cm':args.corner_probe_plus_30cm,
                           'robot':args.robot, 'scan_topics':robot.scan_topics,
                           'speed':args.speed, 'motion_limits':MOTION_SPEEDS[args.speed]._asdict(),
-                          'dependencies':config}, indent=2))
+                          'detector_model':str(args.model_path.resolve()), 'dependencies':config}, indent=2))
         return 0
     if args.output:
         output = args.output.resolve()
@@ -114,6 +114,8 @@ def main():
               'robot':args.robot, 'scan_topics':robot.scan_topics,
               'context':'explicit_mock' if args.mock_params else 'upstream_request', 'speed':args.speed,
               'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once, 'corner_probe_plus_30cm':args.corner_probe_plus_30cm}
+    result['detector_model'] = str(args.model_path.resolve())
+    result['detector_sha256'] = sha256(args.model_path)
     def spawn(argv, name):
         stream = (output/(name+'.log')).open('w'); logs.append(stream)
         process = subprocess.Popen([str(a) for a in argv], cwd=ROOT, stdout=stream,
@@ -201,7 +203,7 @@ def main():
             except (OSError, ValueError):
                 pass  # The owner may have stopped before the controller finished its report.
         for key in ('candidate_attempts', 'request', 'initial_pose', 'final_pose',
-                    'final_measured_twist', 'guard_exit_code', 'before_ocr', 'after_ocr',
+                    'final_measured_twist', 'guard_exit_code', 'before_ocr', 'corner_ocr', 'after_ocr',
                     'elapsed_wall_sec'):
             result[key] = final_report.get(key, result.get(key))
         if args.record_sensors:

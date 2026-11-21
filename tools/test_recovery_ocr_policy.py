@@ -90,6 +90,48 @@ class PolicyTests(unittest.TestCase):
 
 
 class FlowTests(unittest.TestCase):
+    def test_normal_candidate_never_triggers_corner_followup(self):
+        miss = dict(success=False, text=None, reason='not_detected')
+        phases = []
+        def observe(phase):
+            phases.append(phase)
+            return miss
+        result = run_once(observe, lambda: None, lambda: {'label':'end_face'},
+                          lambda candidate: None, lambda state: None,
+                          select_after_probe=lambda: self.fail('unexpected second attempt'))
+        self.assertEqual(phases, ['before', 'after'])
+        self.assertEqual(result['candidate_attempts'], 1)
+
+    def test_corner_followup_is_bounded_and_only_runs_after_a_clean_miss(self):
+        bad = dict(success=False, text=None, reason='not_detected')
+        good = dict(success=True, text='123가4567', reason='consistent_ocr')
+        fault = dict(success=False, text=None, reason='capture_invalid')
+        for corner, second, final, status, expected in (
+                (good, None, None, 'succeeded_after_motion', ['corner_probe','corner']),
+                (bad, None, None, 'no_candidate_after_probe', ['corner_probe','corner','refresh']),
+                (bad, 'end', good, 'succeeded_after_motion', ['corner_probe','corner','refresh','end','after']),
+                (bad, 'end', bad, 'candidate_exhausted', ['corner_probe','corner','refresh','end','after']),
+                (fault, 'end', None, 'candidate_ocr_capture_invalid', ['corner_probe','corner'])):
+            with self.subTest(status=status):
+                calls = []
+                def observe(phase):
+                    calls.append(phase)
+                    return {'before': bad, 'corner': corner, 'after': final}[phase]
+                def refresh():
+                    calls.append('refresh')
+                    return {'label': second} if second else None
+                def run():
+                    return run_once(observe, lambda: None, lambda: {'label':'corner_probe'},
+                                    lambda c: calls.append(c['label']), lambda s: None,
+                                    select_after_probe=refresh)
+                if corner == fault:
+                    with self.assertRaisesRegex(RuntimeError, status): run()
+                else:
+                    result = run()
+                    self.assertEqual(result['status'], status)
+                    self.assertEqual(result['candidate_attempts'], 1 + ('end' in expected))
+                self.assertEqual(calls, ['before', *expected])
+
     def run_flow(self, before, after=None, failure=None, execute=True, candidate='candidate'):
         self.events=[]
         def action(name,value=None):

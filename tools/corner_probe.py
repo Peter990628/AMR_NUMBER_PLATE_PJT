@@ -1,5 +1,6 @@
 """One experimental viewpoint along a repeatedly observed vehicle side (odom XY)."""
 import math
+import time
 
 from cfv_axis_geometry import classify_patch
 from cfv_trial_selection import validate_context
@@ -8,7 +9,7 @@ from evaluate_cfv_axis_recovery import stamp, xy, yaw
 from recovery_selection import SelectionConfig
 
 
-def _side_goal(preview, context, beyond_corner, limits):
+def _side_goal(preview, context, beyond_corner, target_radius_m):
     base = preview['current_pose']
     origin = xy(base['position'])
     faces = [classify_patch(context['axis_xy_odom'], xy(a), xy(b))['label']
@@ -31,7 +32,7 @@ def _side_goal(preview, context, beyond_corner, limits):
         u = [-v for v in u]
     along = sum(u[i]*(near[i]-origin[i]) for i in range(2))
     step = along + beyond_corner
-    if not 0.05 <= step <= limits['target_radius_m']:
+    if not 0.05 <= step <= target_radius_m:
         return None
     goal = [origin[i]+step*u[i] for i in range(2)]
     # Aim from the offset camera at the observed corner with a fixed base XY.
@@ -50,8 +51,12 @@ def _side_goal(preview, context, beyond_corner, limits):
             'beyond_corner_m': beyond_corner}
 
 
-def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=False, beyond_corner_m=0.35):
+def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=False, beyond_corner_m=0.35,
+                           target_radius_m=None):
     """Return a probe only for the newest contiguous, fresh stationary observations."""
+    if target_radius_m is None:
+        limits = CLOSE_LIMITS if plus_30cm else LIMITS
+        target_radius_m = limits['target_radius_m']
     cfg = SelectionConfig()
     support = []
     previous = None
@@ -70,7 +75,7 @@ def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=Fa
             continue
         validate_context(context, preview, now_ros)
         goal = _side_goal(preview, context, 0.65 if plus_30cm else beyond_corner_m,
-                          CLOSE_LIMITS if plus_30cm else LIMITS)
+                          target_radius_m)
         if goal is None:
             support.clear()
             continue
@@ -90,3 +95,18 @@ def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=Fa
         'position': {'x': x, 'y': y, 'z': 0.0},
         'orientation': {'x': 0.0, 'y': 0.0, 'z': math.sin(theta/2), 'w': math.cos(theta/2)}},
         'evidence': goal, 'support_stamps_ns': [s for s, _ in support]}
+
+
+def wait_for_corner_probe(previews, context, ros_time, pump, *, wait_sec, beyond_corner_m, target_radius_m):
+    """Hold at the start pose while new scans can complete the latest confirmation streak."""
+    deadline = time.monotonic() + wait_sec
+    while time.monotonic() < deadline:
+        pump()
+        now = time.monotonic()
+        if now >= deadline:
+            break
+        probe = confirmed_corner_probe(previews, context, ros_time(), now, beyond_corner_m=beyond_corner_m,
+                                       target_radius_m=target_radius_m)
+        if probe is not None:
+            return probe
+    return None
