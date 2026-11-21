@@ -44,7 +44,8 @@ def child_job(argv, log, timeout, pump):
 
 
 class RecoveryOCRSession:
-    def __init__(self, config_path, output):
+    def __init__(self, config_path, output, *, robot='iw_hub'):
+        self.robot = robot
         self.config = json.loads(Path(config_path).read_text())
         self.output = Path(output)
         self.parameters = None
@@ -56,7 +57,7 @@ class RecoveryOCRSession:
         c = self.config
         capture_dir = self.output/(phase+'_capture')
         child_job([c['ros_python'], ROOT/'tools/capture_plate_evaluation.py',
-                   '--trial-id', 'single_recovery', '--phase', phase, '--sampling-mode', 'first_pair',
+                   '--trial-id', 'single_recovery', '--phase', phase, '--sampling-mode', 'numbered',
                    '--seconds', '4', '--hz', '2', '--output', capture_dir],
                   self.output/(phase+'_capture.log'), 20, pump)
         capture_path = capture_dir/'capture.json'
@@ -67,9 +68,9 @@ class RecoveryOCRSession:
             raise RuntimeError('detector_parameters_changed')
         self.parameters = capture['detector_parameters']
         destination = self.output/(phase+'_ocr')
-        child_job([c['ocr_python'], ROOT/'tools/recognize_plate_window.py', '--capture', capture_path,
-                   '--baseline', c['ocr_baseline'], '--output', destination],
-                  self.output/(phase+'_ocr.log'), 35, pump)
+        child_job([c['ros_python'], ROOT/'tools/inspect_plate_window.py', '--capture', capture_path,
+                   '--output', destination],
+                  self.output/(phase+'_ocr.log'), 45, pump)
         result = json.loads((destination/'report.json').read_text())
         return {**result['decision'], 'report': str(destination/'report.json')}
 
@@ -80,7 +81,7 @@ class RecoveryOCRSession:
         # Low real-time factor and intermittent confirmed contours can delay the
         # third pair. Keep all association gates, but stop as soon as it arrives.
         child_job([c['ros_python'], ROOT/'tools/capture_recovery_snapshot.py', '--seconds', '30',
-                   '--samples', '3', '--stop-when-complete', '--output', capture],
+                   '--robot', self.robot, '--samples', '3', '--stop-when-complete', '--output', capture],
                   self.output/'cfv_capture.log', 35, pump)
         inference = self.output/'cfv_inference'
         child_job(['systemd-run', '--user', '--scope', '-p', 'MemoryMax=2G', '-p', 'MemorySwapMax=0',

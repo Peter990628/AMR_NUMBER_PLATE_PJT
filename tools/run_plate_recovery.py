@@ -15,8 +15,9 @@ import sys
 import tempfile
 import time
 
+from probe_plate_ocr import sha256
 from recovery_ocr_session import ROOT, stop_process
-from recovery_trial_math import MOTION_SPEEDS
+from recovery_trial_math import MOTION_SPEEDS, SIMULATION_ROBOTS
 
 
 def defaults():
@@ -42,6 +43,10 @@ def graph_preflight(mock):
         occupied = {t:[p.node_name for p in node.get_publishers_info_by_topic(t)] for t in topics}
         if any(occupied.values()):
             raise RuntimeError('existing_publishers:'+json.dumps(occupied))
+        names = {name for name, _ in node.get_service_names_and_types()}
+        overlapping = names.intersection(('/plate/inspect_frame', '/plate/read_crop', '/plate/assess_window'))
+        if overlapping:
+            raise RuntimeError('existing_plate_services:'+','.join(sorted(overlapping)))
     finally:
         node.destroy_node(); rclpy.shutdown()
 
@@ -53,7 +58,8 @@ def main():
     parser.add_argument('--record-sensors', action='store_true',
                         help='Record LiDAR, odometry, clock and TF to sensors/ during the trial')
     parser.add_argument('--execute', action='store_true')
-    parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
+    parser.add_argument('--robot', choices=SIMULATION_ROBOTS, default='iw_hub')
+    parser.add_argument('--speed', choices=MOTION_SPEEDS,
                         help='Driving speed for Isaac Sim recovery')
     probes = parser.add_mutually_exclusive_group()
     probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35), metavar='METRES',
@@ -67,6 +73,10 @@ def main():
     parser.add_argument('--model-path', type=Path, default=ROOT/'assets/models/semi_allimages_v5n.onnx')
     parser.add_argument('--config', type=Path, help='JSON overriding local model/interpreter paths')
     args = parser.parse_args()
+    robot = SIMULATION_ROBOTS[args.robot]
+    args.speed = args.speed or robot.default_speed
+    if args.speed == 'create3_fast' and args.robot != 'create3':
+        parser.error('create3_fast requires --robot create3')
     config = defaults()
     if args.config:
         overrides = json.loads(args.config.read_text())
@@ -84,6 +94,7 @@ def main():
                           'mock_params':str(args.mock_params) if args.mock_params else None,
                           'record_sensors':args.record_sensors, 'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once,
                           'corner_probe_plus_30cm':args.corner_probe_plus_30cm,
+                          'robot':args.robot, 'scan_topics':robot.scan_topics,
                           'speed':args.speed, 'motion_limits':MOTION_SPEEDS[args.speed]._asdict(),
                           'dependencies':config}, indent=2))
         return 0
@@ -100,6 +111,7 @@ def main():
     owned = []; logs = []
     final_report = {}
     result = {'status':'aborted', 'success':False, 'text':None, 'candidate_attempts':0,
+              'robot':args.robot, 'scan_topics':robot.scan_topics,
               'context':'explicit_mock' if args.mock_params else 'upstream_request', 'speed':args.speed,
               'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once, 'corner_probe_plus_30cm':args.corner_probe_plus_30cm}
     def spawn(argv, name):
@@ -112,6 +124,11 @@ def main():
     previous = {s:signal.signal(s, interrupt) for s in (signal.SIGINT, signal.SIGTERM)}
     try:
         graph_preflight(bool(args.mock_params))
+        baseline = json.loads(Path(config['ocr_baseline']).read_text())
+        (output/'ocr_model.json').write_text(json.dumps({
+            'baseline_sha256': sha256(config['ocr_baseline']),
+            'config': baseline['config'], 'model_hashes': baseline['model_hashes'],
+        }, indent=2)+'\n')
         import yaml
         preview = yaml.safe_load(args.preview_params.read_text())
         preview['recovery_preview']['ros__parameters']['request_timeout_sec'] = 600.
@@ -126,14 +143,18 @@ def main():
             # The motion guard requires Isaac to be the only /cmd_vel subscriber.
             # The controller already writes its command history to events.jsonl.
             spawn(['ros2', 'bag', 'record', '-o', output/'sensors',
-                   '/observation_lidar/scan', '/front_2d_lidar/scan', '/back_2d_lidar/scan',
+                   *robot.scan_topics,
                    '/chassis/odom', '/clock', '/tf', '/tf_static', '/reobservation/scene_tf'], 'sensor_recorder')
+        spawn([config['ocr_python'], ROOT/'tools/plate_crop_ocr_node.py', '--baseline',
+               config['ocr_baseline'], '--cache', output/'ocr_cache'], 'plate_ocr')
+        spawn(['ros2', 'run', 'amr_reobservation', 'plate_window_decision_node'], 'ocr_decision')
         spawn(['ros2', 'launch', 'amr_reobservation', 'plate_observation.launch.py',
                'model_path:='+str(args.model_path.resolve())], 'detector')
         spawn(['ros2', 'launch', 'amr_reobservation', 'recovery_preview.launch.py', 'rviz:=false',
                'params_file:='+str(output/'preview.yaml'), *mock_args], 'preview')
         runner = spawn([config['ros_python'], ROOT/'tools/run_recovery_trial.py',
                         '--single-ocr-config', output/'config.json', '--execute', '--speed', args.speed,
+                        '--robot', args.robot,
                         *(['--corner-probe-once', str(args.corner_probe_once)] if args.corner_probe_once else []),
                         *(['--corner-probe-plus-30cm'] if args.corner_probe_plus_30cm else []),
                         '--output', output/'controller'], 'controller')

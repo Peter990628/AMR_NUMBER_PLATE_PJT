@@ -28,7 +28,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObservationCandidates.msg"
   "msg/RecoveryRequest.msg"
   "msg/RecoveryPreview.msg"
-  DEPENDENCIES std_msgs geometry_msgs)
+  "msg/PlateWindowSample.msg"
+  "srv/InspectPlateFrame.srv"
+  "srv/ReadPlateCrop.srv"
+  "srv/AssessPlateWindow.srv"
+  DEPENDENCIES std_msgs geometry_msgs sensor_msgs)
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_library(scan_preprocessor src/scan_preprocessor.cpp)
@@ -64,6 +68,9 @@ add_executable(plate_observation_node src/plate_observation_node.cpp)
 target_link_libraries(plate_observation_node plate_detector "${cpp_typesupport_target}")
 ament_target_dependencies(plate_observation_node rclcpp rcl_interfaces sensor_msgs std_msgs cv_bridge)
 set_target_properties(plate_observation_node PROPERTIES INSTALL_RPATH "$ORIGIN/..")
+add_executable(plate_window_decision_node src/plate_window_decision_node.cpp)
+target_link_libraries(plate_window_decision_node "${cpp_typesupport_target}")
+ament_target_dependencies(plate_window_decision_node rclcpp)
 add_executable(plate_image_probe src/plate_image_probe.cpp)
 target_link_libraries(plate_image_probe plate_detector)
 set_target_properties(plate_image_probe PROPERTIES INSTALL_RPATH "$ORIGIN/..")
@@ -114,7 +121,7 @@ install(TARGETS plate_detector LIBRARY DESTINATION lib)
 install(DIRECTORY "${ONNXRUNTIME_ROOT}/lib/" DESTINATION lib FILES_MATCHING PATTERN "libonnxruntime.so*")
 install(FILES "${ONNXRUNTIME_ROOT}/LICENSE" "${ONNXRUNTIME_ROOT}/ThirdPartyNotices.txt"
   DESTINATION share/${PROJECT_NAME}/third_party/onnxruntime)
-install(TARGETS scan_preprocessor_node vehicle_side_estimator_node plate_observation_node plate_image_probe observation_candidates_node observation_candidate_stabilizer_node recovery_preview_node
+install(TARGETS scan_preprocessor_node vehicle_side_estimator_node plate_observation_node plate_window_decision_node plate_image_probe observation_candidates_node observation_candidate_stabilizer_node recovery_preview_node
   DESTINATION lib/${PROJECT_NAME})
 install(PROGRAMS scripts/mock_recovery_request.py DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)

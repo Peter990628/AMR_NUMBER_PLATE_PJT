@@ -13,6 +13,22 @@ class MotionSpeed(NamedTuple):
 MOTION_SPEEDS = {
     'normal': MotionSpeed(.07, .25, .08, .30),
     'fast': MotionSpeed(.14, .45, .14, .45),
+    'create3_fast': MotionSpeed(.42, 1.35, .42, 1.35),
+}
+
+
+class SimulationRobot(NamedTuple):
+    scan_topics: tuple
+    twist_subscriber: str
+    default_speed: str
+
+
+OBSERVATION_SCAN = '/observation_lidar/scan'
+SIMULATION_ROBOTS = {
+    'iw_hub': SimulationRobot((OBSERVATION_SCAN, '/front_2d_lidar/scan', '/back_2d_lidar/scan'),
+                              '_iw_hub_ROS_differential_drive_ros2_subscribe_twist', 'normal'),
+    'create3': SimulationRobot((OBSERVATION_SCAN,),
+                               '_create3_differential_drive_ros2_subscribe_twist', 'create3_fast'),
 }
 
 
@@ -97,6 +113,18 @@ def pose_dict(p):
     if not finite_pose(result):
         raise ValueError('nonfinite pose')
     return result
+
+
+def odom_pose_speeds(previous, current):
+    """Planar path and yaw rates from two timestamped odom poses (metres, radians, ns)."""
+    if previous is None:
+        return math.inf, math.inf
+    t0, a = previous
+    t1, b = current
+    seconds = (t1 - t0) / 1e9
+    if not 0 < seconds <= .65:
+        return math.inf, math.inf
+    return math.dist(a[:2], b[:2]) / seconds, abs(angle(b[2] - a[2])) / seconds
 
 
 def segment_clearance(points, start, goal):

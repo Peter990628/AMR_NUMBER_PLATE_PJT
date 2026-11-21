@@ -4,6 +4,7 @@ import argparse
 from collections import Counter, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from uuid import uuid4
 import json
 import math
 import os
@@ -25,8 +26,8 @@ def main():
     parser.add_argument('--hz', type=float, default=2.)
     parser.add_argument('--image-topic', default='/front_stereo_camera/left/image_raw')
     parser.add_argument('--observation-topic', default='/plate/observation')
-    parser.add_argument('--sampling-mode', choices=['first_raw', 'first_pair'], default='first_raw',
-                        help='First raw image, or first exact image/result pair per fixed wall slot; no score filtering')
+    parser.add_argument('--sampling-mode', choices=['first_raw', 'first_pair', 'numbered'], default='first_raw',
+                        help='numbered captures raw frames for on-demand detection; first_pair joins live results')
     parser.add_argument('--startup-timeout', type=float, default=5.,
                         help='Bounded ROS discovery wait before fixed sampling; recorded separately')
     args = parser.parse_args()
@@ -51,6 +52,12 @@ def main():
               'capture_status': 'missing_image', 'image': None, 'observation': None,
               'received_raw_count': 0, 'received_result_count': 0, 'completed_pair_count': 0}
              for i in range(math.ceil(args.seconds*args.hz))]
+    numbered = args.sampling_mode == 'numbered'
+    request_namespace = uuid4().hex if numbered else None
+    if numbered:
+        for slot in slots:
+            slot['sample_id'] = f"{request_namespace}_{slot['id']}"
+    raw_selection = args.sampling_mode != 'first_pair'
     observations = OrderedDict()
     pending_images = OrderedDict()
     writes = []
@@ -200,17 +207,21 @@ def main():
             return
         slot = slots[min(int(elapsed*args.hz), len(slots)-1)]
         slot['received_raw_count'] += 1
-        if args.sampling_mode == 'first_raw' and slot['capture_status'] != 'missing_image':
+        if raw_selection and slot['capture_status'] != 'missing_image':
             return
         header = as_dict(msg.header)
         try:
             key = source_key(header)
         except (KeyError, TypeError, ValueError):
+            if numbered:
+                state['last_fault_wall'] = now
             stats['invalid_image_header'] += 1
             return
         if (state['clock'] is None or now-state['clock_wall'] > 1.
                 or key[1] < state['clock_first']
                 or not 0 <= state['clock']-key[1] <= 500_000_000):
+            if numbered:
+                state['last_fault_wall'] = now
             stats['image_without_fresh_clock'] += 1
             return
         last = state['latest_image_key']
@@ -222,7 +233,7 @@ def main():
             state['fault'] = 'image_stream_changed'
             return
         state['stream'] = stream
-        if args.sampling_mode == 'first_raw':
+        if raw_selection:
             select_image(msg, header, key, now, now, state['clock'])
         else:
             if len(msg.data) > 24*1024**2:
@@ -238,23 +249,26 @@ def main():
 
     subs = [node.create_subscription(Clock, '/clock', clock_cb, qos_profile_sensor_data),
             node.create_subscription(Image, args.image_topic, image_cb, qos_profile_sensor_data),
-            node.create_subscription(PlateObservation, args.observation_topic, observation_cb, 100),
             node.create_subscription(Odometry, '/chassis/odom', odom_cb, qos_profile_sensor_data)]
+    streams = ['clock', 'image']
+    if not numbered:
+        subs.append(node.create_subscription(PlateObservation, args.observation_topic, observation_cb, 100))
+        streams.append('observation')
     graph = {}
     ready_start = time.monotonic()
     while time.monotonic()-ready_start < args.startup_timeout and not all(
-            warmup_counts[k] for k in ('clock', 'image', 'observation')):
+            warmup_counts[k] for k in streams):
         rclpy.spin_once(node, timeout_sec=.02)
     warmup = {'max_wait_sec': args.startup_timeout, 'elapsed_sec': time.monotonic()-ready_start,
               'message_counts': dict(warmup_counts),
-              'all_streams_seen': all(warmup_counts[k] for k in ('clock', 'image', 'observation'))}
+              'all_streams_seen': all(warmup_counts[k] for k in streams)}
     # Pre-window callbacks establish connectivity, never fill evaluation slots.
     stats.clear()
     state['clock_first'] = state['clock']
     started = time.monotonic()
     print(f'Capturing {args.trial_id}/{args.phase}: {args.seconds}s, {args.hz} samples/s; no motion commands', flush=True)
     try:
-        while time.monotonic()-started < args.seconds+1.:
+        while time.monotonic()-started < args.seconds+(0. if numbered else 1.):
             rclpy.spin_once(node, timeout_sec=.02)
         graph = {t: [p.node_name for p in node.get_publishers_info_by_topic(t)]
                  for t in (args.image_topic, args.observation_topic, '/clock')}
@@ -310,6 +324,8 @@ def main():
         sampling = {'mode': 'fixed_wall_slots', 'seconds': args.seconds, 'hz': args.hz,
                     'count': len(slots), 'max_source_age_sec': .5, 'observation_grace_sec': 1.,
                     'startup_timeout_sec': args.startup_timeout}
+        if numbered:
+            sampling.update(selection='first_numbered_raw', observation_grace_sec=0.)
         if args.sampling_mode == 'first_pair':
             sampling.update(selection='first_exact_pair', max_pair_wait_wall_sec=2.)
         report = {'schema': SCHEMA, 'trial_id': args.trial_id, 'phase': args.phase,
@@ -325,12 +341,14 @@ def main():
                   'stationarity': {k: state[k] for k in ('odom_first','odom_last','max_translation_m','max_yaw_rad')},
                   'image_topic': args.image_topic, 'observation_topic': args.observation_topic,
                   'motion_commands_published': False, 'generator_sha256': sha256(__file__)}
+        if numbered:
+            report['request_namespace'] = request_namespace
         write_json(output/'capture.json', report)
         node.destroy_node(); rclpy.shutdown()
     print(json.dumps({'capture': str(output/'capture.json'), 'saved': sum(bool(s['image']) for s in slots),
                       'fault': state['fault']}, ensure_ascii=False), flush=True)
     return 0 if (state['fault'] is None and report['clock_advanced']
-                 and any(s['image'] and s['observation'] for s in slots)) else 1
+                 and any(s['image'] and (numbered or s['observation']) for s in slots)) else 1
 
 
 if __name__ == '__main__':

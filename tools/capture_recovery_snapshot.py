@@ -14,8 +14,10 @@ from pathlib import Path
 import time
 
 from capture_cfv_image import rgb_array
+from candidate_frame_math import quaternion_matrix
 from evaluate_cfv_axis_recovery import rotate, stamp, xy, yaw
 from recovery_selection import CandidateSelector, SelectionConfig
+from recovery_trial_math import SIMULATION_ROBOTS
 
 
 def associate(image_ns, image_pose, preview, confirmation, camera_transform):
@@ -42,8 +44,13 @@ def associate(image_ns, image_pose, preview, confirmation, camera_transform):
                for p, c in zip(preview['base_poses'], preview['camera_positions'])]
     if not offsets or any(math.dist(offsets[0], v) > 1e-5 for v in offsets):
         raise ValueError('inconsistent_camera_offset')
-    offset = rotate(offsets[0], yaw(image_pose))
-    predicted = tuple(a + b for a, b in zip(xy(image_pose['position']), offset))
+    # Preview candidates are level. At exposure the physical base can pitch
+    # or roll, moving the elevated lens laterally in the odom frame.
+    camera_height = preview['camera_positions'][0]['z'] - preview['base_poses'][0]['position']['z']
+    offset_xyz = (*offsets[0], camera_height)
+    rotation = quaternion_matrix([image_pose['orientation'][k] for k in 'xyzw'])
+    predicted = tuple(origin + sum(a*b for a,b in zip(row, offset_xyz))
+                      for origin,row in zip(xy(image_pose['position']), rotation[:2]))
     actual = xy(camera_transform['transform']['translation'])
     error = math.dist(predicted, actual)
     if not all(math.isfinite(v) for v in (*predicted, *actual, distance, turn)) or error > .005:
@@ -62,6 +69,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=25)
     parser.add_argument('--samples', type=int, default=3)
+    parser.add_argument('--robot', choices=SIMULATION_ROBOTS, default='iw_hub')
     parser.add_argument('--stop-when-complete', action='store_true',
                         help='Finish immediately after all associated samples are saved')
     args = parser.parse_args()
@@ -143,10 +151,10 @@ def main():
     types = {'/clock': Clock, '/chassis/odom': Odometry,
              '/front_stereo_camera/left/image_raw': Image,
              '/front_stereo_camera/left/camera_info': CameraInfo,
-             '/observation_lidar/scan': LaserScan, '/front_2d_lidar/scan': LaserScan,
-             '/back_2d_lidar/scan': LaserScan,
              '/plate/observation': PlateObservation,
              '/reobservation/preview': RecoveryPreview, '/reobservation/request': RecoveryRequest}
+    scan_topics = SIMULATION_ROBOTS[args.robot].scan_topics
+    types.update(dict.fromkeys(scan_topics, LaserScan))
     subscriptions = [node.create_subscription(t, k, lambda m, k=k: receive(k, m),
                      10 if k.startswith('/reobservation/') else qos_profile_sensor_data)
                      for k, t in types.items()]
@@ -158,7 +166,7 @@ def main():
             rclpy.spin_once(node, timeout_sec=.02)
             if rollback:
                 raise RuntimeError('Simulation clock went backwards during capture')
-            for key in ('/observation_lidar/scan', '/front_2d_lidar/scan', '/back_2d_lidar/scan'):
+            for key in scan_topics:
                 if key in latest:
                     scan = latest[key]
                     try:

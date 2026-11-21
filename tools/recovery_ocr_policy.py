@@ -21,7 +21,7 @@ def box_iou(a, b):
 
 
 def decide(capture, rows, policy=None):
-    """Only a valid trailing streak can succeed; earlier success is not latched.
+    """Confirm the first qualifying streak in a valid stationary window.
 
     This accepts simple 2/3-digit + Hangul + 4-digit plates, not all Korean
     registration formats. Agreement is evidence, never proof of correct text.
@@ -48,6 +48,8 @@ def decide(capture, rows, policy=None):
     last_stamp = None
     stream = None
     ready = 0
+    confirmed = []
+    confirmed_text = None
     for row in rows:
         key = None
         if row.get('image_header'):
@@ -76,10 +78,15 @@ def decide(capture, rows, policy=None):
                       and box_iou(row['observation'], previous['observation']) >= p['min_box_iou'])
         support = support+[row['slot']] if continuous else [row['slot']]
         text = value; previous = row
+        if not confirmed and len(support) == p['consecutive']:
+            confirmed = support.copy()
+            confirmed_text = value
+    if confirmed:
+        return {**result, 'success': True, 'text': confirmed_text, 'reason': 'consistent_ocr',
+                'trailing_count': len(confirmed), 'supporting_slots': confirmed,
+                'rows_considered': confirmed[-1]+1}
     result.update(trailing_count=len(support), supporting_slots=support)
-    if len(support) >= p['consecutive']:
-        result.update(success=True, text=text, reason='consistent_ocr')
-    elif not ready:
+    if not ready:
         result['reason'] = 'no_valid_observations'
     elif not any(r.get('status') == 'recognized' for r in rows):
         result['reason'] = 'not_detected'

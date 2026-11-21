@@ -2,13 +2,18 @@
 
 Isaac Sim과 ROS 2를 이용한 C++ AMR 번호판 재관측 프로젝트. 번호판 관측이 실패했을 때 센서 정보로 재접근 위치를 정하고, 이동 후 다시 관측하는 알고리즘을 개발한다.
 
-준비된 실험 PC에서 Isaac Sim에 `amr_camera_fail.usd`를 열고 실패 배치에서 Play한 뒤,
+이 실험 브랜치에서는 Isaac Sim에 `amr_create3_camera_fail.usd`를 열고 실패 배치에서 Play한 뒤,
 터미널에서 다음 명령을 실행한다. 현재 위치에서 번호판을 읽을 수 없으면 CFV와 LiDAR로
 재관측 후보를 선택하고, 이동 후 OCR을 다시 확인한다.
 
 ```bash
 ~/peter_pjt/run_recovery_test.sh --execute
 ```
+
+Create 3는 왼쪽 Hawk RGB 카메라 한 대와 RPLidar S2E 한 대를 사용한다.
+주행 명령 상한은 0.42m/s, 1.35rad/s다. 차체 옆면만 보일 때 모서리 탐색도
+시험하려면 `--corner-probe-once 0.15`를 붙인다. iw.hub와 비교할 때는
+`amr_camera_fail.usd`를 열고 같은 명령에 `--robot iw_hub --speed fast`를 붙인다.
 
 실행할 때마다 `local_artifacts/recovery_runs/`에 전후 사진, 판독 결과, 이동·센서 기록을 저장한다.
 차량 힌트는 장면 속 차량의 `world` 위치에서 읽어 이번 실행의 `odom`으로 환산한다.

@@ -1,4 +1,5 @@
 import copy
+import math
 import unittest
 
 from capture_recovery_snapshot import associate
@@ -32,6 +33,15 @@ class SnapshotAssociationTests(unittest.TestCase):
         p['orientation']['w'] = 2.
         with self.assertRaisesRegex(ValueError, 'invalid_image_pose'):
             self.pair(image_pose=p)
+
+    def test_raised_camera_on_pitched_base_matches_exposure_transform(self):
+        pitch = .02
+        p = pose()
+        p['orientation'].update(y=math.sin(pitch/2), w=math.cos(pitch/2))
+        for c, base in zip(self.preview['camera_positions'], self.preview['base_poses']):
+            c['z'] = base['position']['z'] + .75
+        self.transform['transform']['translation']['x'] = .75 * math.sin(pitch)
+        self.assertLess(self.pair(image_pose=p)['camera_tf_offset_error_m'], 1e-9)
 
     def test_future_or_stale_scan_rejected(self):
         for t in (10.3, 10.1):

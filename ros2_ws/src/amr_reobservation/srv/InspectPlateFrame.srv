@@ -1,0 +1,10 @@
+string sample_id
+sensor_msgs/CompressedImage image
+---
+string sample_id
+PlateObservation observation
+string status
+string text
+float64 ocr_confidence
+float64 recognition_ms
+string crop_pixels_sha256

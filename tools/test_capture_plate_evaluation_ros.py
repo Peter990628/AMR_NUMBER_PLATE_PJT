@@ -27,11 +27,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sampling-mode', choices=['first_raw','first_pair'], default='first_raw')
+    parser.add_argument('--sampling-mode', choices=['first_raw','first_pair','numbered'], default='first_raw')
     parser.add_argument('--omit-results', action='store_true')
     args=parser.parse_args()
-    if args.omit_results and args.sampling_mode != 'first_pair':
-        parser.error('--omit-results exercises first_pair missing-slot behavior')
+    if args.omit_results and args.sampling_mode == 'first_raw':
+        parser.error('--omit-results requires first_pair or numbered')
     output=Path(tempfile.mkdtemp(prefix='plate_evaluation_ros_',dir='/tmp'))
     os.environ['ROS_LOG_DIR']=str(output/'ros_log')
     rclpy.init(args=[])
@@ -80,13 +80,22 @@ def main():
                 if child.poll() is None:
                     child.terminate();child.wait(timeout=3)
                     raise AssertionError('Capture exceeded time bound')
-                if child.returncode != (1 if args.omit_results else 0):
+                if child.returncode != int(args.omit_results and args.sampling_mode == 'first_pair'):
                     raise AssertionError((output/(phase+'.log')).read_text())
             capture=json.loads((folder/'capture.json').read_text())
             assert capture['capture_fault'] is None, capture['capture_fault']
             assert capture['clock_advanced']
             assert len(capture['samples'])==6
             good=[s for s in capture['samples'] if s.get('image') and s.get('observation')]
+            if args.sampling_mode == 'numbered':
+                assert len(good) == 0
+                assert 'observation' not in capture['startup']['message_counts']
+                saved = [s for s in capture['samples'] if s['image']]
+                assert len(saved) >= 3, capture['statistics']
+                assert all(s['sample_id'] == capture['request_namespace']+'_'+s['id'] for s in saved)
+                assert all(PILImage.open(s['image']).tobytes() == pixels for s in saved)
+                print(f'{phase}: {len(saved)}/6 numbered raw frames saved independently')
+                continue
             if args.omit_results:
                 assert len(good)==0
                 assert all(s['capture_status'] in ('missing_pair','missing_image') for s in capture['samples'])

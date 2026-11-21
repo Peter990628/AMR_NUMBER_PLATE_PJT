@@ -1,0 +1,12 @@
+bool capture_valid
+uint32 expected_count
+PlateWindowSample[] samples
+---
+bool success
+string text
+string reason
+uint32[] supporting_slots
+uint32 consecutive_required
+float64 min_ocr_confidence
+float64 max_source_gap_sec
+float64 min_box_iou

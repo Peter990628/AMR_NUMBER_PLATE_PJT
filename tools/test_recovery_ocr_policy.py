@@ -28,26 +28,38 @@ class PolicyTests(unittest.TestCase):
         self.assertTrue(decision['success'])
         self.assertEqual(decision['text'],'98나7654')
 
-    def test_last_observations_must_still_agree(self):
-        for status in ('not_detected','missing_pair','ocr_error','input_invalid'):
-            values=rows(); values[-1]['status']=status
-            self.assertFalse(decide(capture(),values)['success'])
-        values=rows(); values[-1]['raw_text']='999나9999'
-        self.assertEqual(decide(capture(),values)['trailing_count'],1)
+    def test_first_three_latch_even_if_seventh_image_is_missing(self):
+        values=rows(8)
+        values[6].update(status='missing_image', image_header=None)
+        decision=decide(capture(8),values)
+        self.assertTrue(decision['success'])
+        self.assertEqual(decision['supporting_slots'],[0,1,2])
+        self.assertEqual(decision['rows_considered'],3)
+
+    def test_first_confirmed_text_wins(self):
+        values=rows(6)
+        for row in values[3:]:
+            row['raw_text']='999나9999'
+        self.assertEqual(decide(capture(6),values)['text'],'123가4567')
+
+    def test_missing_before_confirmation_restarts_streak(self):
+        values=rows(6)
+        values[2].update(status='missing_image', image_header=None)
+        self.assertEqual(decide(capture(6),values)['supporting_slots'],[3,4,5])
 
     def test_ocr_confidence_and_format_are_independent_gates(self):
         for key,value in [('recognition_confidence',.79),('recognition_confidence',float('nan')),
                           ('raw_text','123A4567'),('raw_text','123가456')]:
-            values=rows(); values[-1][key]=value
-            self.assertFalse(decide(capture(),values)['success'])
+            values=rows(3); values[-1][key]=value
+            self.assertFalse(decide(capture(3),values)['success'])
 
     def test_missing_barrier_and_box_switch_break_streak(self):
         for change in ('missing','barrier','box'):
             values=rows()
             if change=='missing': values[2]['status']='missing_pair'
-            if change=='barrier': values[3]['barrier_since_previous']=True
-            if change=='box': values[3]['observation']['x']=500.
-            self.assertFalse(decide(capture(),values)['success'])
+            if change=='barrier': values[2]['barrier_since_previous']=True; values=values[:4]
+            if change=='box': values[2]['observation']['x']=500.
+            self.assertFalse(decide(capture(len(values)),values)['success'])
 
     def test_duplicate_reordered_and_stream_changed_abort(self):
         for index,sec in [(2,10),(3,9)]:
@@ -57,9 +69,9 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(decide(capture(),values)['reason'],'stream_changed')
 
     def test_long_source_gap_resets_and_short_window_fails(self):
-        values=rows()
+        values=rows(4)
         for r in values[-2:]: r['image_header']['stamp']['sec']+=10
-        self.assertFalse(decide(capture(),values)['success'])
+        self.assertFalse(decide(capture(4),values)['success'])
         self.assertFalse(decide(capture(2),rows(2))['success'])
 
     def test_fault_or_incomplete_slots_cannot_pass(self):

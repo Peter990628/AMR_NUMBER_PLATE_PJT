@@ -17,7 +17,7 @@ import sys
 import time
 
 from recovery_trial_math import PoseController, RotationController, angle, pose_dict, segment_clearance, preview_allows_frozen_target
-from recovery_trial_math import MOTION_SPEEDS
+from recovery_trial_math import MOTION_SPEEDS, OBSERVATION_SCAN, SIMULATION_ROBOTS, odom_pose_speeds
 from recovery_trial_math import validate_rotation_return
 from recovery_trial_math import bounded_setup_target, guard_graph_ready, validate_trial_motion
 from recovery_selection import CandidateSelector, SelectionConfig, choose_diverse_snapshot
@@ -73,11 +73,12 @@ def run(args):
     prior_path=args.retry_report or args.return_only_report
     single_ocr = bool(getattr(args, 'single_ocr_config', None))
     speeds = MOTION_SPEEDS[args.speed]
+    robot = SIMULATION_ROBOTS[args.robot]
     ocr_session = None
     if single_ocr:
         from recovery_ocr_session import RecoveryOCRSession
         from recovery_ocr_policy import run_once
-        ocr_session = RecoveryOCRSession(args.single_ocr_config, args.output)
+        ocr_session = RecoveryOCRSession(args.single_ocr_config, args.output, robot=args.robot)
     prior=json.loads(prior_path.read_text()) if prior_path else None
     context_record=prior or (json.loads(args.context_report.read_text()) if args.context_report else None)
     cfv_context=load_context(args.cfv_inference_report) if args.cfv_inference_report else None
@@ -92,6 +93,7 @@ def run(args):
     # Only its one-leg deadline changes; trial goals and spatial guards stay bounded.
     leg_seconds=view_limits['per_leg_wall_sec'] if view_mode else 180. if args.setup_local_offset else 100.
     result={'mode':'simulation_execute' if args.execute else 'selection_only',
+            'robot':args.robot,'scan_topics':robot.scan_topics,
             'baseline':None,'selection':None,'trials':[], 'recovered':False,
             'comparison':{'rotation_only':args.rotation_only,
                 'translation_comparison':args.translation_comparison,'required_aims':args.required_aims,
@@ -135,14 +137,25 @@ def run(args):
         clock_state={'ns':0,'advance_wall':time.monotonic(),'rollback':False}
         clock_history=deque(maxlen=1000)
         baseline_clock_rate=[None]
+        previous_odom_pose=None
+        measured_speeds=(math.inf, math.inf)
         def receive(kind,msg):
+            nonlocal previous_odom_pose, measured_speeds
             now=time.monotonic(); latest[kind]=(now,msg)
             if kind=='preview':
                 d=message_to_ordereddict(msg); previews.append((now,d))
                 event('preview',message=d)
             elif kind=='plate':
                 plates.append((now,msg)); event('plate',message=message_to_ordereddict(msg))
-            elif kind=='odom': event('pose',message=message_to_ordereddict(msg))
+            elif kind=='odom':
+                data=message_to_ordereddict(msg)
+                if args.robot=='create3':
+                    sample=(stamp_ns(msg.header), pose_dict(data['pose']['pose']))
+                    measured_speeds=odom_pose_speeds(previous_odom_pose,sample)
+                    previous_odom_pose=sample
+                else:
+                    measured_speeds=(abs(msg.twist.twist.linear.x),abs(msg.twist.twist.angular.z))
+                event('pose',message=data)
         def clock_cb(msg):
             n=msg.clock.sec*1_000_000_000+msg.clock.nanosec
             if n<clock_state['ns']: clock_state['rollback']=True
@@ -154,9 +167,11 @@ def run(args):
             node.create_subscription(RecoveryPreview,'/reobservation/preview',lambda m:receive('preview',m),10),
             node.create_subscription(RecoveryRequest,'/reobservation/request',lambda m:receive('request',m),10),
             node.create_subscription(PlateObservation,'/plate/observation',lambda m:receive('plate',m),qos_profile_sensor_data),
-            node.create_subscription(Odometry,'/chassis/odom',lambda m:receive('odom',m),qos_profile_sensor_data),
-            node.create_subscription(Image,'/debug/plate_observation',image_history.append,qos_profile_sensor_data)]
-        for topic in ['/observation_lidar/scan','/front_2d_lidar/scan','/back_2d_lidar/scan']:
+            node.create_subscription(Odometry,'/chassis/odom',lambda m:receive('odom',m),qos_profile_sensor_data)]
+        if not single_ocr:
+            subscriptions.append(node.create_subscription(
+                Image,'/debug/plate_observation',image_history.append,qos_profile_sensor_data))
+        for topic in robot.scan_topics:
             subscriptions.append(node.create_subscription(LaserScan,topic,lambda m,k=topic:receive(k,m),qos_profile_sensor_data))
         command_topic='/reobservation/trial_'+str(os.getpid())+'/velocity_request'
         publisher=node.create_publisher(Twist,command_topic,1)
@@ -199,7 +214,7 @@ def run(args):
             if clock_state['rollback']: raise RuntimeError('clock_rollback')
             if now_ns()<=0 or wall-clock_state['advance_wall']>1.5: raise RuntimeError('clock_stalled')
             for key,limit in [('odom',1.),('plate',1.5),('request',1.5),
-                    ('/observation_lidar/scan',1.5),('/front_2d_lidar/scan',1.5),('/back_2d_lidar/scan',1.5)]:
+                    *((topic,1.5) for topic in robot.scan_topics)]:
                 if key not in latest or wall-latest[key][0]>limit: raise RuntimeError('stale_'+key)
                 if key!='request':
                     age=(now_ns()-stamp_ns(latest[key][1].header))/1e9
@@ -237,12 +252,12 @@ def run(args):
                 if len(pubs)!=1 or pubs[0].node_name!=guard_name:
                     raise RuntimeError('cmd_vel_publisher_mismatch:'+repr([p.node_name for p in pubs]))
                 subs=node.get_subscriptions_info_by_topic('/cmd_vel')
-                if len(subs)!=1 or 'iw_hub_ROS_differential_drive_ros2_subscribe_twist' not in subs[0].node_name:
+                if len(subs)!=1 or subs[0].node_name != robot.twist_subscriber:
                     raise RuntimeError('simulation_subscriber_changed')
         def observed_points(only_observation=False,save_label=None):
             points=[]
             evidence=[]
-            keys=['/observation_lidar/scan'] if only_observation else ['/observation_lidar/scan','/front_2d_lidar/scan','/back_2d_lidar/scan']
+            keys=(OBSERVATION_SCAN,) if only_observation else robot.scan_topics
             scan_set={key:latest[key][1] for key in keys}
             for key in keys:
                 scan=scan_set[key]
@@ -304,8 +319,8 @@ def run(args):
             anchor=current(); stable_start=now_ns()
             while (now_ns()-stable_start)/1e9<seconds:
                 command(); spin(); health()
-                p=current(); odom=latest['odom'][1].twist.twist
-                if math.dist(p[:2],anchor[:2])>.01 or abs(angle(p[2]-anchor[2]))>.01 or abs(odom.linear.x)>.015 or abs(odom.angular.z)>.025:
+                p=current()
+                if math.dist(p[:2],anchor[:2])>.01 or abs(angle(p[2]-anchor[2]))>.01 or measured_speeds[0]>.015 or measured_speeds[1]>.025:
                     stable_start=now_ns(); anchor=p
                 if time.monotonic()>deadline: raise RuntimeError('settle_timeout')
             return now_ns()
@@ -318,11 +333,11 @@ def run(args):
             while time.monotonic()<deadline:
                 command(); spin(.05); health()
                 if extended:
-                    p=current(); twist=latest['odom'][1].twist.twist
+                    p=current()
                     max_drift=max(max_drift,math.dist(p[:2],anchor[:2]))
                     max_yaw_drift=max(max_yaw_drift,abs(angle(p[2]-anchor[2])))
                     if (max_drift>.01 or max_yaw_drift>.01
-                            or abs(twist.linear.x)>.015 or abs(twist.angular.z)>.025):
+                            or measured_speeds[0]>.015 or measured_speeds[1]>.025):
                         raise RuntimeError('observation_not_stationary_'+label)
                 for receipt,msg in list(plates):
                     if receipt<=seen_wall: continue
@@ -354,8 +369,24 @@ def run(args):
             controller=RotationController(target) if args.rotation_only else PoseController(target, speed=args.speed)
             deadline=time.monotonic()+leg_seconds
             progress_wall=time.monotonic(); previous=current(); last_check=0.; min_clearance=safe
+            # One horizontal scanner observes the target and the path. While the
+            # target contour is lost, keep the fixed goal but hold the base still.
+            contour_lost_at=None
             while True:
                 health(); pose=current()
+                if args.robot == 'create3' and not latest['preview'][1].valid:
+                    command()
+                    if contour_lost_at is None:
+                        contour_lost_at=time.monotonic()
+                        event('motion_hold',reason=latest['preview'][1].status)
+                    if time.monotonic()-contour_lost_at > 1.5 or time.monotonic()>deadline:
+                        raise RuntimeError('target_contour_lost_during_motion')
+                    spin(.04)
+                    continue
+                if contour_lost_at is not None:
+                    event('motion_resume',held_wall_sec=time.monotonic()-contour_lost_at)
+                    contour_lost_at=None
+                    last_check=0.
                 if time.monotonic()-last_check>.15:
                     min_clearance=min(min_clearance,clearance(target)); last_check=time.monotonic()
                 v,w=controller.command(pose)
@@ -460,7 +491,7 @@ def run(args):
         existing=node.get_publishers_info_by_topic('/cmd_vel')
         audit={'subscribers':[x.node_name for x in subs],'publishers':[x.node_name for x in existing]}
         event('control_audit',**audit)
-        if args.execute and (existing or len(subs)!=1 or 'iw_hub_ROS_differential_drive_ros2_subscribe_twist' not in subs[0].node_name):
+        if args.execute and (existing or len(subs)!=1 or subs[0].node_name != robot.twist_subscriber):
             raise RuntimeError('simulation_control_endpoint_not_exclusive')
         active_request[0]=(latest['request'][1].request_id,stamp_ns(latest['request'][1].header))
         active_request_body[0]=message_to_ordereddict(latest['request'][1])
@@ -530,9 +561,9 @@ def run(args):
             def stationary_pump(anchor):
                 def pump():
                     command(); spin(.04); health()
-                    p = current(); twist = latest['odom'][1].twist.twist
+                    p = current()
                     if (math.dist(p[:2], anchor[:2]) > .01 or abs(angle(p[2]-anchor[2])) > .01
-                            or abs(twist.linear.x) > .015 or abs(twist.angular.z) > .025):
+                            or measured_speeds[0] > .015 or measured_speeds[1] > .025):
                         raise RuntimeError('motion_during_ocr_preparation')
                 return pump
             def observe(phase):
@@ -773,6 +804,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--execute',action='store_true')
+    parser.add_argument('--robot',choices=SIMULATION_ROBOTS,default='iw_hub')
     parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
                         help='Driving speed for single OCR recovery in Isaac Sim')
     probes=parser.add_mutually_exclusive_group()
@@ -799,8 +831,10 @@ if __name__=='__main__':
     parser.add_argument('--max-trials',type=int,help='Default:1 for translation comparison, otherwise4')
     parser.add_argument('--max-seconds',type=float)
     a=parser.parse_args()
+    if a.speed == 'create3_fast' and a.robot != 'create3':
+        parser.error('create3_fast requires --robot create3')
     if a.speed != 'normal' and not a.single_ocr_config:
-        parser.error('--speed fast requires --single-ocr-config')
+        parser.error('higher speeds require --single-ocr-config')
     if (a.corner_probe_once or a.corner_probe_plus_30cm) and not a.single_ocr_config:
         parser.error('corner probe requires the single OCR simulation trial')
     if a.single_ocr_config:

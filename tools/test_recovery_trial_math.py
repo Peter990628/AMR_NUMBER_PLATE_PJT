@@ -3,6 +3,16 @@ import unittest
 from recovery_trial_math import PoseController, RotationController, segment_clearance, preview_allows_frozen_target
 
 class TrialMathTests(unittest.TestCase):
+    def test_odom_pose_speeds_count_rotation_across_pi_and_lateral_motion(self):
+        from recovery_trial_math import odom_pose_speeds
+        start = (100_000_000, (0., 0., math.pi - .01))
+        end = (200_000_000, (0., .01, -math.pi + .01))
+        linear, angular = odom_pose_speeds(start, end)
+        self.assertAlmostEqual(linear, .1)
+        self.assertAlmostEqual(angular, .2)
+        for previous in (None, end, (end[0] + 1, end[1]), (end[0] - 1_000_000_000, end[1])):
+            self.assertEqual(odom_pose_speeds(previous, end), (math.inf, math.inf))
+
     def test_stationary_preparation_never_permits_nonzero_commands(self):
         from recovery_trial_math import validate_trial_motion
         for fixed in (False,True):

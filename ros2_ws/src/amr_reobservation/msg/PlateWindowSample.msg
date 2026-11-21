@@ -1,0 +1,7 @@
+string sample_id
+uint32 slot
+PlateObservation observation
+string status
+string normalized_text
+float64 ocr_confidence
+bool barrier_since_previous

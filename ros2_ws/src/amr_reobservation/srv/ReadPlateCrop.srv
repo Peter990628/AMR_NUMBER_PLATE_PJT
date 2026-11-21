@@ -1,0 +1,10 @@
+string sample_id
+sensor_msgs/Image crop
+---
+string sample_id
+std_msgs/Header header
+string status
+string text
+float64 confidence
+float64 recognition_ms
+string crop_pixels_sha256

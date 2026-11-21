@@ -1,6 +1,9 @@
 #include "amr_reobservation/plate_detector.hpp"
 #include "amr_reobservation/msg/plate_observation.hpp"
 
+#include "amr_reobservation/srv/inspect_plate_frame.hpp"
+#include "amr_reobservation/srv/read_plate_crop.hpp"
+#include <opencv2/imgcodecs.hpp>
 #include <chrono>
 #include <algorithm>
 #include <cmath>
@@ -19,6 +22,8 @@ namespace amr_reobservation
 class PlateObservationNode : public rclcpp::Node
 {
   using Output = msg::PlateObservation;
+  using Inspect = srv::InspectPlateFrame;
+  using ReadCrop = srv::ReadPlateCrop;
   using Steady = std::chrono::steady_clock;
 public:
   PlateObservationNode() : Node("plate_observation")
@@ -41,6 +46,7 @@ public:
     q.border_margin_ratio = parameter("border_margin_ratio", 0.02);
     q.min_tracking_iou = parameter("min_tracking_iou", 0.3);
     q.required_consecutive = parameter("required_consecutive", 3);
+    quality_config_ = q;
     evaluator_ = PlateObservationEvaluator(q);
     timeout_ = parameter("image_timeout_sec", 1.0);
     max_age_ = parameter("max_image_age_sec", 0.5);
@@ -63,6 +69,13 @@ public:
       [this](sensor_msgs::msg::Image::ConstSharedPtr image) {on_image(image);});
     // Dedicated callback group and a two-thread executor keep the watchdog runnable during inference.
     watchdog_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    inspect_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    ocr_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    ocr_ = create_client<ReadCrop>("/plate/read_crop", rmw_qos_profile_services_default, ocr_group_);
+    inspect_service_ = create_service<Inspect>("/plate/inspect_frame",
+      [this](const Inspect::Request::SharedPtr req, Inspect::Response::SharedPtr res) {
+        inspect(*req, *res);
+      }, rmw_qos_profile_services_default, inspect_group_);
     last_receive_ = Steady::now();
     timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {watchdog();}, watchdog_group_);
     RCLCPP_INFO(get_logger(), "Plate detector ready: %s -> %s; CPU, %d consecutive frames",
@@ -99,6 +112,73 @@ private:
     output.image_width = width;
     output.image_height = height;
     return output;
+  }
+
+  Output observation(const std_msgs::msg::Header & header, int width, int height,
+    const PlateObservationResult & r, double ms)
+  {
+    auto o = base_message(header, width, height);
+    o.input_valid = true;
+    o.detected = r.detected; o.usable = r.usable; o.status = r.status;
+    o.x = r.box.x; o.y = r.box.y; o.width = r.box.width; o.height = r.box.height;
+    o.confidence = r.box.confidence; o.border_margin_ratio = r.border_margin_ratio;
+    o.consecutive_count = r.consecutive_count; o.processing_ms = ms;
+    return o;
+  }
+
+  std::vector<PlateBox> detect(const cv::Mat & image)
+  {
+    std::lock_guard<std::mutex> guard(inference_mutex_);
+    return detector_->detect(image);
+  }
+
+  void inspect(const Inspect::Request & req, Inspect::Response & res)
+  {
+    const auto & source = req.image;
+    res.sample_id = req.sample_id;
+    res.observation.header = source.header;
+    res.status = "invalid_image";
+    if (req.sample_id.empty() || source.header.frame_id.empty() || source.format != "png" ||
+      source.data.empty() || source.data.size() > 24 * 1024 * 1024) {return;}
+    try {
+      const auto started = Steady::now();
+      const auto image = cv::imdecode(source.data, cv::IMREAD_COLOR);
+      if (image.empty() || image.cols > 8192 || image.rows > 8192) {return;}
+      // Per-request detection never advances or resets the live tracking streak.
+      PlateObservationEvaluator single_frame(quality_config_);
+      const auto r = single_frame.evaluate(detect(image), image.cols, image.rows);
+      res.observation = observation(source.header, image.cols, image.rows, r, elapsed(started)*1000);
+      if (!r.detected) {res.status = "not_detected"; return;}
+      const auto & b = r.box;
+      const int x1 = std::clamp(static_cast<int>(std::floor(b.x)), 0, image.cols);
+      const int y1 = std::clamp(static_cast<int>(std::floor(b.y)), 0, image.rows);
+      const int x2 = std::clamp(static_cast<int>(std::ceil(b.x+b.width)), 0, image.cols);
+      const int y2 = std::clamp(static_cast<int>(std::ceil(b.y+b.height)), 0, image.rows);
+      if (x1 >= x2 || y1 >= y2) {res.status = "invalid_bbox"; return;}
+      if (!ocr_->service_is_ready()) {res.status = "ocr_unavailable"; return;}
+      auto request = std::make_shared<ReadCrop::Request>();
+      request->sample_id = req.sample_id;
+      request->crop = *cv_bridge::CvImage(source.header, "bgr8",
+        image(cv::Rect(x1, y1, x2-x1, y2-y1))).toImageMsg();
+      auto pending = ocr_->async_send_request(request);
+      if (pending.wait_for(std::chrono::seconds(6)) != std::future_status::ready) {
+        ocr_->remove_pending_request(pending);
+        res.status = "ocr_timeout"; return;
+      }
+      const auto answer = pending.get();
+      if (answer->sample_id != req.sample_id || answer->header != source.header) {
+        res.status = "ocr_source_mismatch"; return;
+      }
+      res.status = answer->status;
+      if (res.status == "recognized") {
+        res.text = answer->text; res.ocr_confidence = answer->confidence;
+        res.recognition_ms = answer->recognition_ms;
+        res.crop_pixels_sha256 = answer->crop_pixels_sha256;
+      }
+    } catch (const std::exception & e) {
+      res.status = "inspection_error";
+      RCLCPP_WARN(get_logger(), "Sample %s: %s", req.sample_id.c_str(), e.what());
+    }
   }
 
   // All publication/state commits occur under mutex_: timeout cannot be followed by
@@ -174,7 +254,7 @@ private:
       RCLCPP_WARN_THROTTLE(get_logger(), steady_clock_, 5000, "Image conversion failed: %s", e.what());
     }
     if (processing_error.empty()) {
-      try {boxes = detector_->detect(converted->image);}
+      try {boxes = detect(converted->image);}
       catch (const std::exception & e) {
         processing_error = "inference_error";
         RCLCPP_WARN_THROTTLE(get_logger(), steady_clock_, 5000, "Inference failed: %s", e.what());
@@ -189,12 +269,7 @@ private:
     const auto error = time_error(image->header);
     if (!error.empty()) {fail(image->header, image->width, image->height, error, ms); return;}
     const auto result = evaluator_.evaluate(boxes, static_cast<int>(image->width), static_cast<int>(image->height));
-    auto output = base_message(image->header, image->width, image->height);
-    output.input_valid = true;
-    output.detected = result.detected; output.usable = result.usable; output.status = result.status;
-    output.x = result.box.x; output.y = result.box.y; output.width = result.box.width; output.height = result.box.height;
-    output.confidence = result.box.confidence; output.border_margin_ratio = result.border_margin_ratio;
-    output.consecutive_count = result.consecutive_count; output.processing_ms = ms;
+    auto output = observation(image->header, image->width, image->height, result, ms);
     publish(output, converted->image);
     RCLCPP_INFO_THROTTLE(get_logger(), steady_clock_, 5000, "plate=%s score=%.3f size=%.0fx%.0f processing=%.1fms",
       output.status.c_str(), output.confidence, output.width, output.height, output.processing_ms);
@@ -218,7 +293,11 @@ private:
 
   std::unique_ptr<PlateDetector> detector_;
   PlateObservationEvaluator evaluator_;
-  std::mutex mutex_;
+  PlateObservationConfig quality_config_;
+  rclcpp::CallbackGroup::SharedPtr inspect_group_, ocr_group_;
+  rclcpp::Client<ReadCrop>::SharedPtr ocr_;
+  rclcpp::Service<Inspect>::SharedPtr inspect_service_;
+  std::mutex inference_mutex_, mutex_;
   double timeout_{1}, max_age_{.5}, future_tolerance_{.1};
   Steady::time_point last_receive_;
   bool received_{false}, timed_out_{false}, have_stamp_{false};
@@ -241,7 +320,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   try {
     auto node = std::make_shared<amr_reobservation::PlateObservationNode>();
-    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
     executor.add_node(node);
     executor.spin();
   } catch (const std::exception & error) {

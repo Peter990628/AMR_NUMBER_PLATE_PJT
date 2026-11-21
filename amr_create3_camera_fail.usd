@@ -1,0 +1,397 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary cameraSettings = {
+            dictionary Front = {
+                double3 position = (5, 0, 0)
+                double radius = 5
+            }
+            dictionary Perspective = {
+                double3 position = (-0.15494980561454003, 1.6458126494188827, 4.7911807060776965)
+                double3 target = (2.5000002572611066, 1.2999996490416832, 1.6788791068478304e-7)
+            }
+            dictionary Right = {
+                double3 position = (0, -5, 0)
+                double radius = 5
+            }
+            dictionary Top = {
+                double3 position = (0, 0, 5)
+                double radius = 5
+            }
+            string boundCamera = "/OmniverseKit_Persp"
+        }
+        dictionary omni_layer = {
+            string authoring_layer = "./amr_create3_camera_fail.usd"
+        }
+        dictionary renderSettings = {
+            int "rtx:externalFrameCounter" = 9599
+            bool "rtx:shadows:enabled" = 0
+        }
+    }
+    defaultPrim = "World"
+    endTimeCode = 1000000
+    metersPerUnit = 1
+    timeCodesPerSecond = 60
+    upAxis = "Z"
+)
+
+def Xform "World" (
+    references = @./amr_camera_fail.usd@</World>
+)
+{
+}
+
+def Xform "Environment" (
+    references = @./amr_camera_fail.usd@</Environment>
+)
+{
+}
+
+def PhysicsScene "PhysicsScene"
+{
+}
+
+def "Graph"
+{
+    def OmniGraph "ROS_Clock" (
+        references = @./amr_camera_fail.usd@</Graph/ROS_Clock>
+    )
+    {
+        over "SceneVehiclePoses"
+        {
+            custom rel inputs:targetPrims = [
+                </create3/base_link/scene_base>,
+                </World/sedan_car>,
+            ]
+        }
+    }
+}
+
+def Xform "create3" (
+    references = @https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Robots/iRobot/Create3/create_3.usd@</create3>
+)
+{
+    quatd xformOp:orient = (0.9205048535, 0, 0, -0.3907311285)
+    double3 xformOp:translate = (0.9599841168, 3.1452550204, 0)
+
+    over "base_link"
+    {
+        def Xform "scene_base"
+        {
+            custom string isaac:nameOverride = "base_link"
+        }
+
+        def Cube "Mast"
+        {
+            color3f[] primvars:displayColor = [(0.14, 0.16, 0.18)]
+            double size = 1
+            double3 xformOp:scale = (0.025, 0.025, 0.69)
+            double3 xformOp:translate = (0.09, 0.00816345, 0.442)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "SensorBracket"
+        {
+            color3f[] primvars:displayColor = [(0.14, 0.16, 0.18)]
+            double size = 1
+            double3 xformOp:scale = (0.235, 0.102, 0.012)
+            double3 xformOp:translate = (0.194, 0.045, 0.733)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Camera "Camera" (
+            references = @https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Sensors/LeopardImaging/Hawk/hawk_v1.1_nominal.usd@</hawk/left/camera_left>
+        )
+        {
+            double3 xformOp:translate = (0.3150411552, 0.0831634521, 0.75)
+        }
+
+        def Xform "front_stereo_camera_left_optical"
+        {
+            quatd xformOp:orient = (0.5, -0.5, 0.5, -0.5)
+            double3 xformOp:translate = (0.3150411552, 0.0831634521, 0.75)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+        }
+
+        def Xform "observation_lidar"
+        {
+            double3 xformOp:translate = (0.2550411552, 0.0081634521, 0.8)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def OmniLidar "Scanner" (
+                references = @https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Sensors/Slamtec/RPLIDAR_S2E/Slamtec_RPLIDAR_S2E.usd@</Root/RPLidar_S2E>
+            )
+            {
+            }
+
+            def Cylinder "Housing"
+            {
+                double height = 0.042
+                color3f[] primvars:displayColor = [(0.1, 0.1, 0.12)]
+                double radius = 0.04
+                double3 xformOp:translate = (0, 0, -0.04)
+                uniform token[] xformOpOrder = ["xformOp:translate"]
+            }
+        }
+
+        over "wheel_drop_left_joint"
+        {
+            float state:linear:physics:position = 0
+            float state:linear:physics:velocity = 0
+        }
+
+        over "wheel_drop_right_joint"
+        {
+            float state:linear:physics:position = 0
+            float state:linear:physics:velocity = 0
+        }
+    }
+
+    def OmniGraph "differential_drive" (
+        references = @./amr_camera_fail.usd@</iw_hub_ROS/differential_drive>
+    )
+    {
+        over "differential_controller_01"
+        {
+            custom double inputs:wheelDistance = 0.233
+            custom double inputs:wheelRadius = 0.03575
+        }
+
+        over "articulation_controller_01"
+        {
+            custom rel inputs:targetPrim = </create3>
+        }
+    }
+
+    def OmniGraph "sensors" (
+        references = @./amr_camera_fail.usd@</iw_hub_ROS/observation_lidar_ros>
+    )
+    {
+        over "Render"
+        {
+            custom rel inputs:cameraPrim = </create3/base_link/observation_lidar/Scanner>
+        }
+
+        over "TF"
+        {
+            custom rel inputs:parentPrim = </create3/base_link>
+            custom rel inputs:targetPrims = [
+                </create3/base_link/observation_lidar>,
+                </create3/base_link/front_stereo_camera_left_optical>,
+            ]
+        }
+
+        def OmniGraphNode "ComputeOdom"
+        {
+            custom rel inputs:chassisPrim = </create3/base_link> (
+                customData = {
+                    dictionary omni = {
+                        dictionary graph = {
+                            string relType = "target"
+                        }
+                    }
+                }
+            )
+            uint inputs:execIn.connect = </create3/sensors/Tick.outputs:tick>
+            token node:type = "isaacsim.core.nodes.IsaacComputeOdometry"
+            int node:typeVersion = 1
+            custom vector3d outputs:angularAcceleration
+            custom vector3d outputs:angularVelocity
+            custom uint outputs:execOut (
+                customData = {
+                    bool isExecution = 1
+                }
+            )
+            custom vector3d outputs:globalLinearAcceleration
+            custom vector3d outputs:globalLinearVelocity
+            custom vector3d outputs:linearAcceleration
+            custom vector3d outputs:linearVelocity
+            custom quatd outputs:orientation
+            custom vector3d outputs:position
+        }
+
+        def OmniGraphNode "PublishOdom"
+        {
+            vector3d inputs:angularVelocity.connect = </create3/sensors/ComputeOdom.outputs:angularVelocity>
+            custom string inputs:chassisFrameId = "base_link"
+            uint64 inputs:context.connect = </create3/sensors/Context.outputs:context>
+            uint inputs:execIn.connect = </create3/sensors/ComputeOdom.outputs:execOut>
+            vector3d inputs:linearVelocity.connect = </create3/sensors/ComputeOdom.outputs:linearVelocity>
+            custom string inputs:nodeNamespace
+            custom string inputs:odomFrameId = "odom"
+            quatd inputs:orientation.connect = </create3/sensors/ComputeOdom.outputs:orientation>
+            vector3d inputs:position.connect = </create3/sensors/ComputeOdom.outputs:position>
+            custom bool inputs:publishRawVelocities
+            custom string inputs:qosProfile
+            custom uint64 inputs:queueSize
+            custom vector3d inputs:robotFront
+            double inputs:timeStamp.connect = </create3/sensors/Time.outputs:simulationTime>
+            custom string inputs:topicName = "/chassis/odom"
+            token node:type = "isaacsim.ros2.bridge.ROS2PublishOdometry"
+            int node:typeVersion = 1
+        }
+
+        def OmniGraphNode "OdomTF"
+        {
+            custom string inputs:childFrameId = "base_link"
+            uint64 inputs:context.connect = </create3/sensors/Context.outputs:context>
+            uint inputs:execIn.connect = </create3/sensors/ComputeOdom.outputs:execOut>
+            custom string inputs:nodeNamespace
+            custom string inputs:parentFrameId = "odom"
+            custom string inputs:qosProfile
+            custom uint64 inputs:queueSize
+            quatd inputs:rotation.connect = </create3/sensors/ComputeOdom.outputs:orientation>
+            custom bool inputs:staticPublisher
+            double inputs:timeStamp.connect = </create3/sensors/Time.outputs:simulationTime>
+            custom string inputs:topicName = "/tf"
+            vector3d inputs:translation.connect = </create3/sensors/ComputeOdom.outputs:position>
+            token node:type = "isaacsim.ros2.bridge.ROS2PublishRawTransformTree"
+            int node:typeVersion = 1
+        }
+
+        def OmniGraphNode "CameraRender"
+        {
+            custom rel inputs:cameraPrim = </create3/base_link/Camera> (
+                customData = {
+                    dictionary omni = {
+                        dictionary graph = {
+                            string relType = "target"
+                        }
+                    }
+                }
+            )
+            custom uint inputs:execIn
+            uint inputs:execIn.connect = </create3/sensors/Once.outputs:step>
+            custom uint inputs:height = 1200
+            custom uint inputs:width = 1920
+            token node:type = "isaacsim.core.nodes.IsaacCreateRenderProduct"
+            int node:typeVersion = 2
+            custom uint outputs:execOut (
+                customData = {
+                    bool isExecution = 1
+                }
+            )
+            custom token outputs:renderProductPath
+        }
+
+        def OmniGraphNode "RGB"
+        {
+            custom uint64 inputs:context
+            uint64 inputs:context.connect = </create3/sensors/Context.outputs:context>
+            custom uint inputs:execIn
+            uint inputs:execIn.connect = </create3/sensors/CameraRender.outputs:execOut>
+            custom string inputs:frameId = "front_stereo_camera_left_optical"
+            custom token inputs:renderProductPath
+            token inputs:renderProductPath.connect = </create3/sensors/CameraRender.outputs:renderProductPath>
+            custom bool inputs:resetSimulationTimeOnStop = 1
+            custom string inputs:topicName = "/front_stereo_camera/left/image_raw"
+            custom token inputs:type = "rgb"
+            custom bool inputs:useSystemTime = 0
+            token node:type = "isaacsim.ros2.bridge.ROS2CameraHelper"
+            int node:typeVersion = 2
+        }
+
+        def OmniGraphNode "CameraInfo"
+        {
+            custom uint64 inputs:context
+            uint64 inputs:context.connect = </create3/sensors/Context.outputs:context>
+            custom uint inputs:execIn
+            uint inputs:execIn.connect = </create3/sensors/CameraRender.outputs:execOut>
+            custom string inputs:frameId = "front_stereo_camera_left_optical"
+            custom token inputs:renderProductPath
+            token inputs:renderProductPath.connect = </create3/sensors/CameraRender.outputs:renderProductPath>
+            custom bool inputs:resetSimulationTimeOnStop = 1
+            custom string inputs:topicName = "/front_stereo_camera/left/camera_info"
+            custom bool inputs:useSystemTime = 0
+            token node:type = "isaacsim.ros2.bridge.ROS2CameraInfoHelper"
+            int node:typeVersion = 1
+        }
+    }
+
+    over "wheel_drop_left"
+    {
+        over "left_wheel_joint"
+        {
+            float state:angular:physics:position = 0
+            float state:angular:physics:velocity = 0
+        }
+    }
+
+    over "wheel_drop_right"
+    {
+        over "right_wheel_joint"
+        {
+            float state:angular:physics:position = 0
+            float state:angular:physics:velocity = 0
+        }
+    }
+
+    over "left_wheel"
+    {
+    }
+
+    over "right_wheel"
+    {
+    }
+}
+
+def "Render" (
+    no_delete = true
+)
+{
+    def "OmniverseKit"
+    {
+        def "HydraTextures" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            def RenderProduct "Replicator" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </create3/base_link/Camera>
+                rel orderedVars = </Render/Vars/LdrColor>
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1920, 1200)
+            }
+
+            def RenderProduct "Replicator_01" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </create3/base_link/observation_lidar/Scanner>
+                rel orderedVars = </Render/Vars/LdrColor>
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1, 1)
+            }
+        }
+    }
+
+    def RenderSettings "OmniverseGlobalRenderSettings" (
+        prepend apiSchemas = ["OmniRtxSettingsGlobalRtAdvancedAPI_1", "OmniRtxSettingsGlobalPtAdvancedAPI_1"]
+        no_delete = true
+    )
+    {
+        rel products = [
+            </Render/OmniverseKit/HydraTextures/Replicator>,
+            </Render/OmniverseKit/HydraTextures/Replicator_01>,
+        ]
+    }
+
+    def "Vars"
+    {
+        def RenderVar "LdrColor" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            uniform string sourceName = "LdrColor"
+        }
+    }
+}
+

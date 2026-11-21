@@ -12,5 +12,6 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 
 exec /usr/bin/python3 "$project_dir/tools/run_plate_recovery.py" \
+  --robot create3 \
   --mock-params "$project_dir/ros2_ws/src/amr_reobservation/config/camera_fail_test_hint.yaml" \
   --record-sensors "$@"
