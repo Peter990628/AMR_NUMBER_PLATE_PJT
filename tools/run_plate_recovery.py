@@ -16,6 +16,7 @@ import tempfile
 import time
 
 from recovery_ocr_session import ROOT, stop_process
+from recovery_trial_math import MOTION_SPEEDS
 
 
 def defaults():
@@ -52,6 +53,13 @@ def main():
     parser.add_argument('--record-sensors', action='store_true',
                         help='Record LiDAR, odometry, clock and TF to sensors/ during the trial')
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
+                        help='Driving speed for Isaac Sim recovery')
+    probes = parser.add_mutually_exclusive_group()
+    probes.add_argument('--corner-probe-once', action='store_true',
+                        help='Try one observed corner viewpoint if ordinary end-face selection times out')
+    probes.add_argument('--corner-probe-plus-30cm', action='store_true',
+                        help='Compare a side-only viewpoint 0.65 m beyond the observed corner')
     parser.add_argument('--mock-params', type=Path,
                         help='Explicit manual vehicle-hint fixture; otherwise require upstream RecoveryRequest')
     parser.add_argument('--preview-params', type=Path,
@@ -74,7 +82,10 @@ def main():
         print(json.dumps({'status':'configuration_checked', 'motion_enabled':False,
                           'context':'explicit_mock' if args.mock_params else 'upstream_request',
                           'mock_params':str(args.mock_params) if args.mock_params else None,
-                          'record_sensors':args.record_sensors, 'dependencies':config}, indent=2))
+                          'record_sensors':args.record_sensors, 'corner_probe_once':args.corner_probe_once,
+                          'corner_probe_plus_30cm':args.corner_probe_plus_30cm,
+                          'speed':args.speed, 'motion_limits':MOTION_SPEEDS[args.speed]._asdict(),
+                          'dependencies':config}, indent=2))
         return 0
     if args.output:
         output = args.output.resolve()
@@ -89,7 +100,8 @@ def main():
     owned = []; logs = []
     final_report = {}
     result = {'status':'aborted', 'success':False, 'text':None, 'candidate_attempts':0,
-              'context':'explicit_mock' if args.mock_params else 'upstream_request'}
+              'context':'explicit_mock' if args.mock_params else 'upstream_request', 'speed':args.speed,
+              'corner_probe_once':args.corner_probe_once, 'corner_probe_plus_30cm':args.corner_probe_plus_30cm}
     def spawn(argv, name):
         stream = (output/(name+'.log')).open('w'); logs.append(stream)
         process = subprocess.Popen([str(a) for a in argv], cwd=ROOT, stdout=stream,
@@ -121,7 +133,9 @@ def main():
         spawn(['ros2', 'launch', 'amr_reobservation', 'recovery_preview.launch.py', 'rviz:=false',
                'params_file:='+str(output/'preview.yaml'), *mock_args], 'preview')
         runner = spawn([config['ros_python'], ROOT/'tools/run_recovery_trial.py',
-                        '--single-ocr-config', output/'config.json', '--execute',
+                        '--single-ocr-config', output/'config.json', '--execute', '--speed', args.speed,
+                        *(['--corner-probe-once'] if args.corner_probe_once else []),
+                        *(['--corner-probe-plus-30cm'] if args.corner_probe_plus_30cm else []),
                         '--output', output/'controller'], 'controller')
         deadline = time.monotonic()+560
         last_stage = None

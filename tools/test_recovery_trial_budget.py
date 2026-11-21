@@ -26,6 +26,16 @@ class TranslationBudgetTests(unittest.TestCase):
         self.assertLess(budget['outbound']['reserved_wall_sec'], 100.)
         self.assertGreater(budget['required_wall_sec'], 100.)
 
+    def test_fast_profile_shortens_both_legs_with_same_arrival_tolerance(self):
+        goal = (.4, -.9, -.6)
+        normal = self.budget(goal)
+        fast = self.budget(goal, speed='fast')
+        for leg, target in [('outbound', goal), ('return', (0., 0., 0.))]:
+            self.assertLess(fast[leg]['sim_sec'], normal[leg]['sim_sec'])
+            pose = fast[leg]['predicted_pose']
+            self.assertLessEqual(math.dist(pose[:2], target[:2]), .02)
+            self.assertLessEqual(abs(pose[2]-target[2]), math.radians(1.2))
+
     def test_opposite_diagonal_keeps_round_trip_margin_at_slow_clock(self):
         # Recorded opposite-side geometry: time reserve, not spatial/speed limits,
         # prevented departure at 0.247 simulation seconds per wall second.

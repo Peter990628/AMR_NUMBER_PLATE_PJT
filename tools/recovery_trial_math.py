@@ -1,5 +1,19 @@
 """ROS-free bounded differential-drive trial primitives (simulation tooling)."""
 import math
+from typing import NamedTuple
+
+
+class MotionSpeed(NamedTuple):
+    linear: float       # m/s
+    angular: float      # rad/s
+    guard_linear: float
+    guard_angular: float
+
+
+MOTION_SPEEDS = {
+    'normal': MotionSpeed(.07, .25, .08, .30),
+    'fast': MotionSpeed(.14, .45, .14, .45),
+}
 
 
 FROZEN_TARGET_PERCEPTION_MISSES = frozenset({
@@ -100,9 +114,13 @@ def segment_clearance(points, start, goal):
 
 class PoseController:
     """Turn, drive forward, align, then stop. The target never changes."""
-    def __init__(self, target, max_linear=.07, max_angular=.25, xy_tolerance=.02,
-                 yaw_tolerance=math.radians(1.2)):
-        if not finite_pose(target) or not 0 < max_linear <= .08 or not 0 < max_angular <= .3:
+    def __init__(self, target, max_linear=None, max_angular=None, xy_tolerance=.02,
+                 yaw_tolerance=math.radians(1.2), *, speed='normal'):
+        limits = MOTION_SPEEDS[speed]
+        max_linear = limits.linear if max_linear is None else max_linear
+        max_angular = limits.angular if max_angular is None else max_angular
+        if (not finite_pose(target) or not 0 < max_linear <= limits.guard_linear
+                or not 0 < max_angular <= limits.guard_angular):
             raise ValueError('invalid target/speed')
         self.target = tuple(target)
         self.max_linear, self.max_angular = max_linear, max_angular

@@ -28,8 +28,8 @@ def _pose(value):
     return tuple(float(coordinate) for coordinate in value)
 
 
-def _leg(start, target):
-    controller = PoseController(target)
+def _leg(start, target, speed):
+    controller = PoseController(target, speed=speed)
     x, y, yaw = start
     # Bound both CPU work and the simulated horizon even if a future controller
     # change fails to converge. Feed the actual predicted endpoint into return.
@@ -56,7 +56,7 @@ def _leg(start, target):
 
 def assess_translation_budget(current, target, initial, *, remaining_wall_sec,
                               baseline_rate, recent_rate, margin=1.25,
-                              per_leg_wall_limit_sec=100.0):
+                              per_leg_wall_limit_sec=100.0, speed='normal'):
     """Estimate candidate motion, two observations, and return before departure.
 
     ``baseline_rate`` and ``recent_rate`` are measured positive ROS-seconds per
@@ -73,8 +73,8 @@ def assess_translation_budget(current, target, initial, *, remaining_wall_sec,
     if margin < 1 or per_leg_wall_limit_sec <= 0:
         raise ValueError('margin must be at least one and leg deadline positive')
     rate = min(float(baseline_rate), float(recent_rate))
-    outbound = _leg(current, target)
-    returning = _leg(outbound['predicted_pose'], initial)
+    outbound = _leg(current, target, speed)
+    returning = _leg(outbound['predicted_pose'], initial, speed)
     for leg in (outbound, returning):
         leg['estimated_wall_sec'] = leg['sim_sec'] / rate
         leg['reserved_wall_sec'] = leg['estimated_wall_sec'] * margin
@@ -89,7 +89,7 @@ def assess_translation_budget(current, target, initial, *, remaining_wall_sec,
     else:
         reason = 'ok'
     return {
-        'feasible': reason == 'ok', 'reason': reason,
+        'feasible': reason == 'ok', 'reason': reason, 'speed': speed,
         'required_wall_sec': required, 'remaining_wall_sec': float(remaining_wall_sec),
         'rate_used': rate, 'baseline_rate': float(baseline_rate),
         'recent_rate': float(recent_rate), 'margin': float(margin),

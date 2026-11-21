@@ -19,6 +19,7 @@ from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
+from recovery_trial_math import MOTION_SPEEDS
 
 
 def parser():
@@ -27,9 +28,10 @@ def parser():
                         help='Private heartbeat/velocity topic; must differ from output.')
     result.add_argument('--output-topic', default='/cmd_vel')
     result.add_argument('--node-name', default='recovery_command_guard')
-    result.add_argument('--max-linear', type=float, default=0.08,
+    result.add_argument('--speed', choices=MOTION_SPEEDS, default='normal')
+    result.add_argument('--max-linear', type=float,
                         help='Linear speed cap; 0 independently enforces rotation only.')
-    result.add_argument('--max-angular', type=float, default=0.30)
+    result.add_argument('--max-angular', type=float)
     result.add_argument('--timeout', type=float, default=0.35,
                         help='Command lease in real seconds, independent of /clock.')
     result.add_argument('--max-session', type=float, default=280.0,
@@ -113,7 +115,12 @@ class CommandGuard(Node):
 def main(argv=None):
     argument_parser = parser()
     args = argument_parser.parse_args(argv)
-    for name, upper in (('max_linear', 0.08), ('max_angular', 0.30),
+    limits = MOTION_SPEEDS[args.speed]
+    if args.max_linear is None:
+        args.max_linear = limits.guard_linear
+    if args.max_angular is None:
+        args.max_angular = limits.guard_angular
+    for name, upper in (('max_linear', limits.guard_linear), ('max_angular', limits.guard_angular),
                         ('timeout', 0.35), ('max_session', 600.0)):
         value = getattr(args, name)
         minimum_ok = value >= 0.0 if name == 'max_linear' else value > 0.0

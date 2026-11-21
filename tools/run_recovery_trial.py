@@ -17,6 +17,7 @@ import sys
 import time
 
 from recovery_trial_math import PoseController, RotationController, angle, pose_dict, segment_clearance, preview_allows_frozen_target
+from recovery_trial_math import MOTION_SPEEDS
 from recovery_trial_math import validate_rotation_return
 from recovery_trial_math import bounded_setup_target, guard_graph_ready, validate_trial_motion
 from recovery_selection import CandidateSelector, SelectionConfig, choose_diverse_snapshot
@@ -71,6 +72,7 @@ def run(args):
     started=time.monotonic()
     prior_path=args.retry_report or args.return_only_report
     single_ocr = bool(getattr(args, 'single_ocr_config', None))
+    speeds = MOTION_SPEEDS[args.speed]
     ocr_session = None
     if single_ocr:
         from recovery_ocr_session import RecoveryOCRSession
@@ -99,7 +101,8 @@ def run(args):
                 'repeat_view':repeat_view,'fresh_close_view':args.cfv_fresh_close or single_ocr,
                 'setup_local_offset':args.setup_local_offset,
                 'trial_observation_sim_sec':None if single_ocr else 10. if extended_observation else 1.},
-            'motion_limits':{'max_linear_m_s':0. if args.rotation_only else .07,'max_angular_rad_s':.25,
+            'motion_limits':{'speed':args.speed, 'max_linear_m_s':0. if args.rotation_only else speeds.linear,
+                'max_angular_rad_s':speeds.angular,
                 'footprint_circle_m':1.2,'radius_from_start_m':.03 if args.rotation_only else view_limits['motion_radius_m'] if view_mode else .55,
                 'target_radius_m':target_radius, 'per_leg_wall_sec':leg_seconds,'max_session_wall_sec':args.max_seconds},
             'limitations':['Observed obstacle clearance is not certified free space/navigation.',
@@ -348,7 +351,7 @@ def run(args):
             if math.dist(target[:2],initial[0][:2])>target_radius: raise RuntimeError('target_outside_local_trial')
             health(); safe=clearance(target,save_label=label)
             event('motion_start',label=label,target=target,clearance_m=safe)
-            controller=(RotationController if args.rotation_only else PoseController)(target)
+            controller=RotationController(target) if args.rotation_only else PoseController(target, speed=args.speed)
             deadline=time.monotonic()+leg_seconds
             progress_wall=time.monotonic(); previous=current(); last_check=0.; min_clearance=safe
             while True:
@@ -495,8 +498,8 @@ def run(args):
             guard_log=(args.output/'guard.log').open('w')
             guard=subprocess.Popen([sys.executable,str(Path(__file__).with_name('recovery_command_guard.py')),
                 '--input-topic',command_topic,'--node-name',guard_name,'--max-session',str(args.max_seconds),
-                '--max-linear','0' if args.rotation_only else '.08',
-                '--max-angular','.25' if args.rotation_only else '.3','--timeout','.35'],
+                '--speed',args.speed, *(['--max-linear','0','--max-angular','.25'] if args.rotation_only else []),
+                '--timeout','.35'],
                 stdout=guard_log,stderr=subprocess.STDOUT,start_new_session=True)
             deadline=time.monotonic()+5
             while True:
@@ -544,15 +547,42 @@ def run(args):
                 cfv_context = load_context(path)
                 result['cfv_context'] = {k:v for k,v in cfv_context.items() if k!='reference_preview'}
             def select():
-                try:
-                    chosen = select_candidates()
-                except RuntimeError as error:
-                    if str(error) != 'insufficient_aim_diversity': raise
-                    return None
+                if args.corner_probe_plus_30cm:
+                    from corner_probe import confirmed_corner_probe
+                    deadline = time.monotonic() + 12.
+                    while time.monotonic() < deadline:
+                        spin(.08)
+                        health(allow_contour_miss=True)
+                        probe = confirmed_corner_probe(previews, cfv_context, now_ns()/1e9,
+                                                       time.monotonic(), plus_30cm=True)
+                        if probe is not None:
+                            break
+                    else:
+                        event('corner_probe_unconfirmed', beyond_corner_m=.65)
+                        return None
+                    chosen = {'status': 'confirmed_corner_probe', 'queue': [probe]}
+                else:
+                    chosen = select_recovery_or_probe()
+                    if chosen is None:
+                        return None
                 result['selection'] = chosen
                 write_json(args.output/'selection.json', chosen)
                 event('selected', selection=chosen)
                 return chosen['queue'][0] if chosen.get('queue') else None
+            def select_recovery_or_probe():
+                try:
+                    chosen = select_candidates()
+                except RuntimeError as error:
+                    if str(error) != 'insufficient_aim_diversity': raise
+                    if not args.corner_probe_once:
+                        return None
+                    from corner_probe import confirmed_corner_probe
+                    probe = confirmed_corner_probe(previews, cfv_context, now_ns()/1e9, time.monotonic())
+                    if probe is None:
+                        event('corner_probe_unconfirmed')
+                        return None
+                    chosen = {'status': 'confirmed_corner_probe', 'queue': [probe]}
+                return chosen
             def move_once(candidate):
                 target = pose_dict(candidate['base_pose'])
                 # Reserve the stopped OCR phase. No return leg in recovery mode.
@@ -560,13 +590,14 @@ def run(args):
                 budget = assess_translation_budget(current(), target, target,
                     baseline_rate=rate, recent_rate=rate,
                     remaining_wall_sec=max(0., args.max_seconds-(time.monotonic()-started)-60.),
-                    per_leg_wall_limit_sec=leg_seconds)
+                    per_leg_wall_limit_sec=leg_seconds, speed=args.speed)
                 result['budget_assessments'] = [budget]
                 if not budget['feasible']: raise RuntimeError('insufficient_recovery_budget')
                 frozen[0] = True
                 result['candidate_attempts'] = 1
-                result['trials'].append({'candidate':candidate, 'target':list(target), 'label':'ocr_candidate'})
-                move(target, 'ocr_candidate')  # existing scan-time TF, sweep and live guards
+                label = 'corner_probe' if candidate.get('label') == 'corner_probe' else 'ocr_candidate'
+                result['trials'].append({'candidate':candidate, 'target':list(target), 'label':label})
+                move(target, label)  # existing scan-time TF, sweep and live guards
             decision = run_once(observe, prepare, select, move_once, state, execute=args.execute)
             result.update(decision, recovered=decision['success'],
                           verification_status='ocr_consensus_without_ground_truth')
@@ -741,6 +772,13 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--execute',action='store_true')
+    parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
+                        help='Driving speed for single OCR recovery in Isaac Sim')
+    probes=parser.add_mutually_exclusive_group()
+    probes.add_argument('--corner-probe-once',action='store_true',
+                        help='On missing end face, allow one short, confirmed side-to-corner probe in the OCR trial')
+    probes.add_argument('--corner-probe-plus-30cm',action='store_true',
+                        help='Only try the comparison viewpoint 0.65 m beyond the observed corner')
     context_group=parser.add_mutually_exclusive_group()
     context_group.add_argument('--retry-report',type=Path,help='New fixed-context trial from an aborted report; requires mock:=false')
     context_group.add_argument('--context-report',type=Path,help='Copy only saved odom mission context; freshly select candidates; requires mock:=false')
@@ -760,6 +798,10 @@ if __name__=='__main__':
     parser.add_argument('--max-trials',type=int,help='Default:1 for translation comparison, otherwise4')
     parser.add_argument('--max-seconds',type=float)
     a=parser.parse_args()
+    if a.speed != 'normal' and not a.single_ocr_config:
+        parser.error('--speed fast requires --single-ocr-config')
+    if (a.corner_probe_once or a.corner_probe_plus_30cm) and not a.single_ocr_config:
+        parser.error('corner probe requires the single OCR simulation trial')
     if a.single_ocr_config:
         if (a.retry_report or a.context_report or a.return_only_report or a.cfv_view_c or a.cfv_fresh_close
                 or a.cfv_close_reference or a.repeat_view_reference or a.max_trials not in (None,1)):

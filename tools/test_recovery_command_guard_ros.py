@@ -55,7 +55,7 @@ def main():
         require(predicate(), 'Predicate did not become true within deadline')
 
     class Trial:
-        def __init__(self, session=12., max_linear=.08, max_angular=.30):
+        def __init__(self, session=12., max_linear=None, max_angular=None, speed='normal'):
             identity = uuid.uuid4().hex[:8]
             self.input = '/guard_test_' + identity + '/request'
             self.output = '/guard_test_' + identity + '/output'
@@ -71,8 +71,9 @@ def main():
             self.process = subprocess.Popen(
                 [sys.executable, str(guard), '--input-topic', self.input,
                  '--output-topic', self.output, '--node-name', self.node_name,
-                 '--max-session', str(session), '--max-linear', str(max_linear),
-                 '--max-angular', str(max_angular)], stdout=self.log,
+                 '--max-session', str(session), '--speed', speed,
+                 *(['--max-linear', str(max_linear)] if max_linear is not None else []),
+                 *(['--max-angular', str(max_angular)] if max_angular is not None else [])], stdout=self.log,
                 stderr=subprocess.STDOUT, start_new_session=True, env=dict(os.environ))
             children.append(self)
             wait_for(lambda: self.messages and guard_graph_ready(
@@ -150,6 +151,19 @@ def main():
             output = t.close()
             require('invalid_command_latched' in output, 'No invalid-command log')
             rows.append({'case': name, 'pass': True})
+
+        t = Trial(speed='fast')
+        t.stream(.3, x=.14, z=-.45)
+        require(any(msg[0] == .14 and msg[5] == -.45 for _, msg in t.messages),
+                'Fast profile did not forward its bounded command')
+        t.stream(.15, x=.141, z=0.)
+        marker = time.monotonic()
+        t.stream(.3, x=.14, z=0.)
+        after = [msg for stamp, msg in t.messages if stamp >= marker]
+        require(len(after) >= 3 and all(all(v == 0. for v in msg) for msg in after),
+                'Fast profile overspeed did not latch zero')
+        require('invalid_command_latched' in t.close(), 'Missing fast overspeed fault')
+        rows.append({'case': 'fast_speed_cap_and_overspeed_stop', 'pass': True})
 
         t = Trial(max_linear=0., max_angular=.25)
         last = t.stream(.3, x=0., z=.2)
