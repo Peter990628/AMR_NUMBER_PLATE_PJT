@@ -49,6 +49,9 @@ ROS_DOMAIN_ID=89 ROS_LOCALHOST_ONLY=1 python3 src/amr_reobservation/test/smoke_r
 
 ## AMR 시작 자세를 바꾸는 실험의 차량 고정 좌표
 
+`run_recovery_test.sh`는 `scene_world` 모드로 현재 Isaac Sim 장면의 차량 원점을 읽고
+스캔 시각의 AMR 자세로 `odom` 힌트를 계산한다. [주행 없이 확인하기](docs/fixed_vehicle_hint.md)
+
 `vehicle_hint_mode: fixed_frame`으로 차량 위치를 고정 좌표계에서 입력할 수 있다.
 차량 힌트는 AMR 시작 자세와 독립적이고, 접근 자세는 매 실험의 초기 TF에서 새로 읽는다.
 `config/mock_recovery_request_fixed.yaml`에 입력 프레임과 차량 XY를 지정한다.

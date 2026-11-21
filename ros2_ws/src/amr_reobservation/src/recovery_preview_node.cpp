@@ -517,7 +517,7 @@ private:
     const std::string source =
       (request_->source.find("mock") != std::string::npos ||
       request_->source.find("MOCK") != std::string::npos) ?
-      "MOCK manual hint" : request_->source.substr(0, 64);
+      "MOCK vehicle hint" : request_->source.substr(0, 64);
     text(8, scope_position, "PREVIEW: path/free space unchecked\n"
       "Aims = observed surfaces, not plate locations\nplate: " + out.plate_status +
       " | source: " + source + "\nXY aim at camera height; heading unknown", 1, .65F, 0);

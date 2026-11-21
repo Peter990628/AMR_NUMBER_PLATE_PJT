@@ -11,7 +11,8 @@ Isaac Sim과 ROS 2를 이용한 C++ AMR 번호판 재관측 프로젝트. 번호
 ```
 
 실행할 때마다 `local_artifacts/recovery_runs/`에 전후 사진, 판독 결과, 이동·센서 기록을 저장한다.
-기본 차량 힌트의 좌표계와 다른 배치에서의 실행 방법은 [통합 실험 안내](ros2_ws/src/amr_reobservation/docs/single_candidate_ocr_recovery.md)를 참고한다.
+차량 힌트는 장면 속 차량의 `world` 위치에서 읽어 이번 실행의 `odom`으로 환산한다.
+AMR의 시작 위치나 방향을 바꿔도 좌표를 입력할 필요가 없다. [통합 실험 안내](ros2_ws/src/amr_reobservation/docs/single_candidate_ocr_recovery.md)
 
 - 환경: Ubuntu 22.04, ROS 2 Humble, Isaac Sim 5.1, C++17.
 - [`ros2_ws/src/amr_reobservation`](ros2_ws/src/amr_reobservation/README.md): C++ 코드, 빌드·실행 방법, 테스트, 파라미터 설명.

@@ -51,6 +51,16 @@ class CornerProbeTest(unittest.TestCase):
         frames[1][1]['valid'] = False
         self.assertIsNone(self.select(frames))
 
+    def test_shorter_overrun_uses_the_same_travel_limit(self):
+        self.preview['current_pose'] = copy.deepcopy(self.preview['current_pose'])
+        self.ctx['image_pose'] = self.preview['current_pose']
+        self.preview['current_pose']['position']['y'] = 1.3
+        self.assertIsNone(self.select(self.frames()))
+        goal = confirmed_corner_probe(self.frames(), self.ctx, 10.24, 20.64, beyond_corner_m=.15)
+        self.assertAlmostEqual(goal['evidence']['step_m'], 1.45)
+        self.preview['current_pose']['position']['y'] = 1.4
+        self.assertIsNone(confirmed_corner_probe(self.frames(), self.ctx, 10.24, 20.64, beyond_corner_m=.15))
+
     def test_comparison_adds_30cm_and_obeys_existing_close_view_radius(self):
         normal = self.select(self.frames())['evidence']
         def comparison():

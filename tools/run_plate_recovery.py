@@ -56,8 +56,8 @@ def main():
     parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
                         help='Driving speed for Isaac Sim recovery')
     probes = parser.add_mutually_exclusive_group()
-    probes.add_argument('--corner-probe-once', action='store_true',
-                        help='Try one observed corner viewpoint if ordinary end-face selection times out')
+    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35), metavar='METRES',
+                        help='After end-face selection times out, probe 0.15 or 0.35 m beyond the corner (default 0.35)')
     probes.add_argument('--corner-probe-plus-30cm', action='store_true',
                         help='Compare a side-only viewpoint 0.65 m beyond the observed corner')
     parser.add_argument('--mock-params', type=Path,
@@ -82,7 +82,7 @@ def main():
         print(json.dumps({'status':'configuration_checked', 'motion_enabled':False,
                           'context':'explicit_mock' if args.mock_params else 'upstream_request',
                           'mock_params':str(args.mock_params) if args.mock_params else None,
-                          'record_sensors':args.record_sensors, 'corner_probe_once':args.corner_probe_once,
+                          'record_sensors':args.record_sensors, 'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once,
                           'corner_probe_plus_30cm':args.corner_probe_plus_30cm,
                           'speed':args.speed, 'motion_limits':MOTION_SPEEDS[args.speed]._asdict(),
                           'dependencies':config}, indent=2))
@@ -101,7 +101,7 @@ def main():
     final_report = {}
     result = {'status':'aborted', 'success':False, 'text':None, 'candidate_attempts':0,
               'context':'explicit_mock' if args.mock_params else 'upstream_request', 'speed':args.speed,
-              'corner_probe_once':args.corner_probe_once, 'corner_probe_plus_30cm':args.corner_probe_plus_30cm}
+              'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once, 'corner_probe_plus_30cm':args.corner_probe_plus_30cm}
     def spawn(argv, name):
         stream = (output/(name+'.log')).open('w'); logs.append(stream)
         process = subprocess.Popen([str(a) for a in argv], cwd=ROOT, stdout=stream,
@@ -127,14 +127,14 @@ def main():
             # The controller already writes its command history to events.jsonl.
             spawn(['ros2', 'bag', 'record', '-o', output/'sensors',
                    '/observation_lidar/scan', '/front_2d_lidar/scan', '/back_2d_lidar/scan',
-                   '/chassis/odom', '/clock', '/tf', '/tf_static'], 'sensor_recorder')
+                   '/chassis/odom', '/clock', '/tf', '/tf_static', '/reobservation/scene_tf'], 'sensor_recorder')
         spawn(['ros2', 'launch', 'amr_reobservation', 'plate_observation.launch.py',
                'model_path:='+str(args.model_path.resolve())], 'detector')
         spawn(['ros2', 'launch', 'amr_reobservation', 'recovery_preview.launch.py', 'rviz:=false',
                'params_file:='+str(output/'preview.yaml'), *mock_args], 'preview')
         runner = spawn([config['ros_python'], ROOT/'tools/run_recovery_trial.py',
                         '--single-ocr-config', output/'config.json', '--execute', '--speed', args.speed,
-                        *(['--corner-probe-once'] if args.corner_probe_once else []),
+                        *(['--corner-probe-once', str(args.corner_probe_once)] if args.corner_probe_once else []),
                         *(['--corner-probe-plus-30cm'] if args.corner_probe_plus_30cm else []),
                         '--output', output/'controller'], 'controller')
         deadline = time.monotonic()+560

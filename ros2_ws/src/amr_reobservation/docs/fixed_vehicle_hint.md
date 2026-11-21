@@ -9,6 +9,7 @@ AMR 자세를 다시 더하지 않는다. 원래 접근 자세는 실험 시작 
 
 | 파라미터 | 의미 |
 |---|---|
+| `vehicle_hint_mode: scene_world` | `run_recovery_test.sh`가 사용하는 방식. 장면이 발행하는 `scene_vehicle_frame`의 원점을 현재 실행의 `odom`으로 변환한다. |
 | `vehicle_hint_mode: anchor_base` | 기존 방식. 시작 AMR 기준 `(vehicle_hint_x_in_anchor_base_m, vehicle_hint_y_in_anchor_base_m)`를 한 번 변환한다. 기본값이다. |
 | `vehicle_hint_mode: fixed_frame` | `(vehicle_hint_x_m, vehicle_hint_y_m)`를 고정 좌표계의 차량 위치로 사용한다. 두 값은 반드시 지정해야 한다. |
 | `vehicle_hint_frame` | 고정 입력 좌표의 기준. 빈 문자열이면 출력의 `fixed_frame`을 사용한다. `base_link` 같은 이동 프레임을 사용하면 안 된다. |
@@ -18,7 +19,41 @@ AMR 자세를 다시 더하지 않는다. 원래 접근 자세는 실험 시작 
 목표를 입력하는 기능은 아니다. `approach_*_in_anchor_base_m`, `approach_yaw_from_anchor_deg`는
 기존 의미를 유지한다. 모두 0이면 이번 실험의 시작 AMR 자세가 접근 자세가 된다.
 
-## 설정과 미리보기
+## 현재 Isaac Sim 배치에서 주행 전 확인
+
+`amr_camera_fail.usd`는 Play 중에 같은 메시지에 `world → base_link`와
+`world → sedan_car`를 담아 `/reobservation/scene_tf`로 발행한다. mock 노드는 스캔 시각에
+차량과 AMR의 world 좌표 차이를 구하고, 두 좌표계에서 본 AMR의 yaw 차이만큼 회전한 뒤
+AMR의 odom 위치를 더한다. 차량의 방향이나 번호판 위치는 이 계산에 쓰이지 않는다.
+변환은 요청 내부에서 이루어진다. 로봇의 기존 `/tf` 트리는 그대로 사용한다.
+
+아래 명령은 주행 없이 RViz를 연다.
+
+```bash
+cd ~/peter_pjt
+source /opt/ros/humble/setup.bash
+source ros2_ws/install/setup.bash
+ros2 launch amr_reobservation recovery_preview.launch.py \
+  mock_params_file:="$PWD/ros2_ws/src/amr_reobservation/config/camera_fail_test_hint.yaml"
+```
+
+터미널의 `sedan_car at world (…) -> odom (…)`와 RViz의 노란 힌트를 확인한다.
+Stop에서 AMR 위치와 방향만 바꾸고 Play했을 때 차량의 world 좌표는 같고 새 odom 좌표가
+같은 차체 지점을 가리켜야 한다. 장면 데이터가 없으면 mock 노드는 요청을 보류한다.
+RViz 마커는 관측 LiDAR에서 유효한 차체 윤곽을 찾으면 표시된다.
+
+수정 전부터 장면을 열어 두었고 `/reobservation/scene_tf`가 나오지 않으면 Stop 상태에서
+Script Editor에 다음을 한 번 실행해 현재 배치에 레이어를 연결한다.
+
+```python
+import omni.usd
+stage = omni.usd.get_context().get_stage()
+layer = stage.GetRootLayer()
+if not stage.GetPrimAtPath("/Graph/ROS_Clock/SceneVehiclePoses"):
+    layer.subLayerPaths.append("./assets/scene_vehicle_hint.usda")
+```
+
+## 고정 좌표 수동 입력과 미리보기
 
 설치한 노드와 새 설정 파일을 반영한다.
 
@@ -76,7 +111,7 @@ ros2 launch amr_reobservation recovery_preview.launch.py \
 새 `odom`에서 다른 좌표를 가질 수 있다. `odom` 입력의 재사용은 원점·축이 유지되는 구간으로
 한정한다. 노드 재시작은 좌표의 정확성을 자동으로 확인해 주지 않는다.
 
-배치 재시작을 넘어 같은 차량 좌표를 재사용하려면 위치가 유지되는 `map` 또는 `world`를
+`fixed_frame` 수동 입력으로 배치 재시작을 넘어 같은 차량 좌표를 재사용하려면 위치가 유지되는 `map` 또는 `world`를
 `vehicle_hint_frame`으로 지정하고, 해당 프레임과 새 `odom` 사이의 **올바른 TF**를 제공해야 한다.
 출력 `fixed_frame`은 기존대로 `odom`에 둘 수 있다. 노드는 스캔 시각의 변환을 적용한 뒤
 차량 힌트를 고정한다. 변환이 없거나 해당 시각을 지원하지 않으면 요청 발행을 기다린다.
@@ -85,9 +120,8 @@ ros2 launch amr_reobservation recovery_preview.launch.py \
 
 ROS 시각이 뒤로 가면 기존 요청·스캔·TF를 비우고 새 스캔과 TF로 새 요청을 만든다.
 이것은 이전 시각의 데이터를 섞지 않기 위한 처리이며, `odom` 원점이 유지된다는 증거는 아니다.
-현재 저장된 TF 기록에는 `map/world → odom` 연결이 없고, 이번 기능이 그 연결을 자동으로
-생성하거나 USD 차량 위치를 읽어 오지는 않는다. 다른 시작 자세로 Stop → Play하는 실험에는
-좌표 보정 또는 그 연결의 추가가 필요하다.
+기본 `scene_world` 실험은 두 좌표계 사이의 평면 변환을 요청마다 계산한다.
+센서 기록에는 해당 실험에서 사용한 `/reobservation/scene_tf`도 저장된다.
 
 ## 검증
 

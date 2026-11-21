@@ -8,7 +8,7 @@ from evaluate_cfv_axis_recovery import stamp, xy, yaw
 from recovery_selection import SelectionConfig
 
 
-def _side_goal(preview, context, plus_30cm):
+def _side_goal(preview, context, beyond_corner, limits):
     base = preview['current_pose']
     origin = xy(base['position'])
     faces = [classify_patch(context['axis_xy_odom'], xy(a), xy(b))['label']
@@ -30,9 +30,7 @@ def _side_goal(preview, context, plus_30cm):
     if sum(u[i]*(near[i]-far[i]) for i in range(2)) < 0:
         u = [-v for v in u]
     along = sum(u[i]*(near[i]-origin[i]) for i in range(2))
-    beyond_corner = 0.65 if plus_30cm else 0.35
     step = along + beyond_corner
-    limits = CLOSE_LIMITS if plus_30cm else LIMITS
     if not 0.05 <= step <= limits['target_radius_m']:
         return None
     goal = [origin[i]+step*u[i] for i in range(2)]
@@ -52,7 +50,7 @@ def _side_goal(preview, context, plus_30cm):
             'beyond_corner_m': beyond_corner}
 
 
-def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=False):
+def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=False, beyond_corner_m=0.35):
     """Return a probe only for the newest contiguous, fresh stationary observations."""
     cfg = SelectionConfig()
     support = []
@@ -71,7 +69,8 @@ def confirmed_corner_probe(previews, context, now_ros, now_wall, *, plus_30cm=Fa
             support.clear()
             continue
         validate_context(context, preview, now_ros)
-        goal = _side_goal(preview, context, plus_30cm)
+        goal = _side_goal(preview, context, 0.65 if plus_30cm else beyond_corner_m,
+                          CLOSE_LIMITS if plus_30cm else LIMITS)
         if goal is None:
             support.clear()
             continue

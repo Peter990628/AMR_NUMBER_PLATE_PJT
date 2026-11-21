@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Publish explicitly synthetic mission context anchored once at a scan-time pose.
 
-The hint is manually configured relative to the initial base pose (anchor_base)
-or in a stationary coordinate frame (fixed_frame). It is not vehicle perception,
-plate ground truth, or a saved successful recovery pose.
+The hint comes from the simulated vehicle origin (scene_world), a stationary
+point (fixed_frame), or an offset from the initial base pose (anchor_base).
 Repeating a request does not refresh its stamp/lifetime. Restart for a new trial.
 """
 import math
@@ -12,14 +11,32 @@ import time
 import uuid
 
 import rclpy
+from rclpy.clock import JumpThreshold
+from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from rcl_interfaces.msg import ParameterDescriptor
 from sensor_msgs.msg import LaserScan
+from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer, TransformListener, TransformException
 from amr_reobservation.msg import RecoveryRequest
+
+
+def ground_pose(transform):
+    """XY and heading of an upright AMR in the supplied frame."""
+    p, q = transform.translation, transform.rotation
+    values = (p.x, p.y, p.z, q.x, q.y, q.z, q.w)
+    if not all(map(math.isfinite, values)):
+        return None
+    norm = math.hypot(q.x, q.y, q.z, q.w)
+    if abs(norm - 1.0) > 1e-3:
+        return None
+    x, y, z, w = (v / norm for v in (q.x, q.y, q.z, q.w))
+    if 1 - 2*(x*x + y*y) < math.cos(math.radians(5)):
+        return None
+    return p.x, p.y, math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z))
 
 
 class MockRecoveryRequest(Node):
@@ -31,6 +48,7 @@ class MockRecoveryRequest(Node):
         self.hint_x = self.param('vehicle_hint_x_in_anchor_base_m', 3.5)
         self.hint_y = self.param('vehicle_hint_y_in_anchor_base_m', 0.4)
         self.hint_frame = self.param('vehicle_hint_frame', '') or self.fixed
+        self.scene_vehicle = self.param('scene_vehicle_frame', 'sedan_car')
         # Missing fixed coordinates must not silently become a vehicle at (0, 0).
         # An explicitly supplied (0, 0), however, is a valid fixed-frame point.
         self.fixed_hint_x = self.param('vehicle_hint_x_m', float('nan'))
@@ -42,15 +60,17 @@ class MockRecoveryRequest(Node):
         self.wall_lifetime = self.param('max_wall_age_sec', 300.0)
         self.reason = self.param('failure_reason', 'not_detected')
         self.target_id = self.param('target_id', 'manual_failure_vehicle')
-        if self.hint_mode not in ('anchor_base', 'fixed_frame'):
-            raise ValueError('vehicle_hint_mode must be anchor_base or fixed_frame')
+        if self.hint_mode not in ('anchor_base', 'fixed_frame', 'scene_world'):
+            raise ValueError('vehicle_hint_mode must be anchor_base, fixed_frame or scene_world')
+        if self.hint_mode == 'scene_world' and self.scene_vehicle in ('', 'world', self.base):
+            raise ValueError('scene_vehicle_frame must identify the vehicle in the world frame')
         if self.hint_mode == 'fixed_frame':
             if not all(math.isfinite(v) for v in (self.fixed_hint_x, self.fixed_hint_y)):
                 raise ValueError('fixed_frame mode requires finite vehicle_hint_x_m and vehicle_hint_y_m')
             if self.hint_frame == self.base:
                 raise ValueError('vehicle_hint_frame must be stationary, not base_frame')
-        hint = ((self.hint_x, self.hint_y) if self.hint_mode == 'anchor_base'
-                else (self.fixed_hint_x, self.fixed_hint_y))
+        hint = {'anchor_base': (self.hint_x, self.hint_y),
+                'fixed_frame': (self.fixed_hint_x, self.fixed_hint_y), 'scene_world': ()}[self.hint_mode]
         numbers = (*hint, self.approach_x,
                    self.approach_y, self.approach_yaw, self.lifetime, self.wall_lifetime)
         if (not all(math.isfinite(x) for x in numbers) or not 0 < self.lifetime <= 600
@@ -60,6 +80,12 @@ class MockRecoveryRequest(Node):
             raise ValueError('Invalid mock context parameters')
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, self)
+        # Keep world -> base_link separate from the robot's odom -> base_link TF.
+        self.scene_buffer = None
+        if self.hint_mode == 'scene_world':
+            self.scene_buffer = Buffer()
+            self.scene_sub = self.create_subscription(
+                TFMessage, '/reobservation/scene_tf', self.on_scene_tf, qos_profile_sensor_data)
         self.pub = self.create_publisher(
             RecoveryRequest, self.param('request_topic', '/reobservation/request'), 1)
         self.sub = self.create_subscription(
@@ -67,15 +93,16 @@ class MockRecoveryRequest(Node):
             self.on_scan, qos_profile_sensor_data)
         self.scan = None
         self.request = None
-        self.previous_ros_ns = None
         self.expired_logged = False
         self.anchor_wall = None
         self.wait_reason = None
+        self.clock_jump = self.get_clock().create_jump_callback(
+            JumpThreshold(min_forward=None, min_backward=Duration(nanoseconds=-1),
+                          on_clock_change=False), post_callback=self.on_clock_reset)
         self.timer = self.create_timer(0.5, self.on_timer,
                                        clock=rclpy.clock.Clock(clock_type=rclpy.clock.ClockType.STEADY_TIME))
         self.get_logger().info(
             f'MOCK context: vehicle_hint_mode={self.hint_mode}, '
-            f'hint_frame={self.base if self.hint_mode == "anchor_base" else self.hint_frame}, '
             f'output_frame={self.fixed}; '
             'waiting for fresh scan-time TF. No motion commands.')
         if self.hint_mode == 'fixed_frame':
@@ -89,6 +116,36 @@ class MockRecoveryRequest(Node):
 
     def on_scan(self, scan):
         self.scan = scan
+
+    def on_scene_tf(self, message):
+        for tf in message.transforms:
+            if tf.header.frame_id == 'world' and tf.child_frame_id in (self.base, self.scene_vehicle):
+                self.scene_buffer.set_transform(tf, 'Isaac Sim scene')
+
+    def scene_hint_at(self, stamp, odom_base):
+        """Map the live vehicle's world XY into odom using the same base and scan time."""
+        try:
+            robot = self.scene_buffer.lookup_transform('world', self.base, stamp)
+            car = self.scene_buffer.lookup_transform('world', self.scene_vehicle, stamp)
+        except TransformException:
+            self.wait_for_context(f'Waiting for world poses of {self.base} and {self.scene_vehicle} '
+                                  'at the scan stamp on /reobservation/scene_tf')
+            return None
+        base = ground_pose(robot.transform)
+        vehicle = car.transform.translation
+        if base is None or not all(map(math.isfinite, (vehicle.x, vehicle.y))):
+            self.wait_for_context('Invalid world pose for the AMR or vehicle')
+            return None
+        dx, dy = vehicle.x - base[0], vehicle.y - base[1]
+        angle = odom_base[2] - base[2]
+        c, s = math.cos(angle), math.sin(angle)
+        hint = (odom_base[0] + c*dx - s*dy, odom_base[1] + s*dx + c*dy)
+        if not all(map(math.isfinite, hint)):
+            self.wait_for_context('Invalid world-to-odom vehicle position')
+            return None
+        self.get_logger().info(f'{self.scene_vehicle} at world ({vehicle.x:.3f}, {vehicle.y:.3f}) '
+                               f'-> {self.fixed} ({hint[0]:.3f}, {hint[1]:.3f})')
+        return hint
 
     def wait_for_context(self, reason):
         if reason != self.wait_reason:
@@ -127,16 +184,18 @@ class MockRecoveryRequest(Node):
             return None
         return point
 
+    def on_clock_reset(self, _jump):
+        self.request = self.scan = None
+        self.buffer.clear()
+        if self.scene_buffer is not None:
+            self.scene_buffer.clear()
+        self.expired_logged = False
+        self.anchor_wall = None
+        self.wait_reason = None
+        self.get_logger().warning('ROS time reset; waiting for a new mock anchor')
+
     def on_timer(self):
         now = self.get_clock().now()
-        if self.previous_ros_ns is not None and now.nanoseconds < self.previous_ros_ns:
-            self.request = self.scan = None
-            self.buffer.clear()
-            self.expired_logged = False
-            self.anchor_wall = None
-            self.wait_reason = None
-            self.get_logger().warning('ROS time reset; waiting for a new mock anchor')
-        self.previous_ros_ns = now.nanoseconds
         if now.nanoseconds <= 0:
             return
         if self.request is None:
@@ -153,27 +212,23 @@ class MockRecoveryRequest(Node):
                 tf = self.buffer.lookup_transform(self.fixed, self.base, source)
             except TransformException:
                 return
-            p, q = tf.transform.translation, tf.transform.rotation
-            values = (p.x, p.y, p.z, q.x, q.y, q.z, q.w)
-            if not all(math.isfinite(v) for v in values):
+            pose = ground_pose(tf.transform)
+            if pose is None:
                 return
-            norm = math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w)
-            if abs(norm - 1.0) > 1e-3:
-                return
-            x, y, z, w = (v / norm for v in (q.x, q.y, q.z, q.w))
-            # The request is planar; reject tilted base transforms.
-            vertical_z = 1 - 2*(x*x + y*y)
-            if vertical_z < math.cos(math.radians(5)):
-                return
-            yaw = math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z))
+            base_x, base_y, yaw = pose
             c, s = math.cos(yaw), math.sin(yaw)
-            if self.hint_mode == 'fixed_frame':
+            if self.hint_mode == 'scene_world':
+                hint = self.scene_hint_at(source, pose)
+                hint_source = f'Isaac world vehicle origin {self.scene_vehicle}'
+            elif self.hint_mode == 'fixed_frame':
                 hint = self.fixed_hint_at(source)
-                if hint is None:
-                    return
+                hint_source = f'manual fixed-frame vehicle hint in {self.hint_frame}'
             else:
-                hint = (p.x + c*self.hint_x - s*self.hint_y,
-                        p.y + s*self.hint_x + c*self.hint_y)
+                hint = (base_x + c*self.hint_x - s*self.hint_y,
+                        base_y + s*self.hint_x + c*self.hint_y)
+                hint_source = 'manual anchor-base vehicle hint'
+            if hint is None:
+                return
             request = RecoveryRequest()
             request.header.frame_id = self.fixed
             request.header.stamp = stamp
@@ -181,16 +236,14 @@ class MockRecoveryRequest(Node):
             request.target_id = self.target_id
             request.enabled = True
             request.vehicle_hint.x, request.vehicle_hint.y = hint
-            request.approach_pose.position.x = p.x + c*self.approach_x - s*self.approach_y
-            request.approach_pose.position.y = p.y + s*self.approach_x + c*self.approach_y
+            request.approach_pose.position.x = base_x + c*self.approach_x - s*self.approach_y
+            request.approach_pose.position.y = base_y + s*self.approach_x + c*self.approach_y
             angle = yaw + self.approach_yaw
             request.approach_pose.orientation.z = math.sin(angle/2)
             request.approach_pose.orientation.w = math.cos(angle/2)
             request.failure_reason = self.reason
             request.valid_for_sec = self.lifetime
-            hint_source = (f'fixed-frame vehicle hint in {self.hint_frame}'
-                           if self.hint_mode == 'fixed_frame' else 'anchor-base vehicle hint')
-            request.source = ('MOCK manual ' + hint_source +
+            request.source = ('MOCK ' + hint_source +
                               '; approach=initial base pose plus configured offset')
             self.request = request
             self.wait_reason = None

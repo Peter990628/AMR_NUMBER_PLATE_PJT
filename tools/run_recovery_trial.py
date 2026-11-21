@@ -577,7 +577,8 @@ def run(args):
                     if not args.corner_probe_once:
                         return None
                     from corner_probe import confirmed_corner_probe
-                    probe = confirmed_corner_probe(previews, cfv_context, now_ns()/1e9, time.monotonic())
+                    probe = confirmed_corner_probe(previews, cfv_context, now_ns()/1e9, time.monotonic(),
+                                                   beyond_corner_m=args.corner_probe_once)
                     if probe is None:
                         event('corner_probe_unconfirmed')
                         return None
@@ -775,8 +776,8 @@ if __name__=='__main__':
     parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
                         help='Driving speed for single OCR recovery in Isaac Sim')
     probes=parser.add_mutually_exclusive_group()
-    probes.add_argument('--corner-probe-once',action='store_true',
-                        help='On missing end face, allow one short, confirmed side-to-corner probe in the OCR trial')
+    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35), metavar='METRES',
+                        help='After end-face selection times out, probe 0.15 or 0.35 m beyond the corner (default 0.35)')
     probes.add_argument('--corner-probe-plus-30cm',action='store_true',
                         help='Only try the comparison viewpoint 0.65 m beyond the observed corner')
     context_group=parser.add_mutually_exclusive_group()

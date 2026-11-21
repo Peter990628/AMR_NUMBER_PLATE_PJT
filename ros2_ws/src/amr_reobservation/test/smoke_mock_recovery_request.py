@@ -100,6 +100,7 @@ def run(report_path=None):
                 self.received = []
                 self.clock = node.create_publisher(Clock, self.prefix + '/clock', 10)
                 self.tf = node.create_publisher(TFMessage, self.prefix + '/tf', 10)
+                self.scene = node.create_publisher(TFMessage, self.prefix + '/scene_tf', 10)
                 self.scan = node.create_publisher(LaserScan, self.prefix + '/scan', qos_profile_sensor_data)
                 self.sub = node.create_subscription(RecoveryRequest, self.prefix + '/request',
                                                     self.received.append, 10)
@@ -114,13 +115,14 @@ def run(report_path=None):
                         [sys.executable, str(source), '--ros-args', '-r', '__node:=' + self.name,
                          '--params-file', str(self.config), '-r', '/clock:=' + self.prefix + '/clock',
                          '-r', '/tf:=' + self.prefix + '/tf',
+                         '-r', '/reobservation/scene_tf:=' + self.prefix + '/scene_tf',
                          '-r', '/tf_static:=' + self.prefix + '/tf_static'],
                         stdout=stream, stderr=subprocess.STDOUT, start_new_session=True)
 
             def close(self):
                 stop(self.process)
                 node.destroy_subscription(self.sub)
-                for publisher in (self.clock, self.tf, self.scan):
+                for publisher in (self.clock, self.tf, self.scene, self.scan):
                     node.destroy_publisher(publisher)
 
             def stamp(self, ns=None):
@@ -144,7 +146,7 @@ def run(report_path=None):
                 return transform
 
             def feed(self, base=None, source_pose=None, source_age=0., scan=True,
-                     source_z=0., source_roll=0.):
+                     source_z=0., source_roll=0., world_base=None, world_car=None, world_age=0.):
                 self.ns += 30_000_000
                 self.clock.publish(Clock(clock=self.stamp()))
                 transforms = []
@@ -156,6 +158,14 @@ def run(report_path=None):
                                                      z=source_z, roll=source_roll))
                 if transforms:
                     self.tf.publish(TFMessage(transforms=transforms))
+                scene = []
+                for child, pose in (('base_link', world_base), ('sedan_car', world_car)):
+                    if pose is not None:
+                        tf = self.transform(child, pose, self.ns - round(world_age * 1e9))
+                        tf.header.frame_id = 'world'
+                        scene.append(tf)
+                if scene:
+                    self.scene.publish(TFMessage(transforms=scene))
                 if scan:
                     message = LaserScan()
                     message.header.frame_id = 'observation_lidar'
@@ -272,6 +282,32 @@ def run(report_path=None):
             near(message.vehicle_hint.y, 6., 'new epoch map transform y')
             check_pose(message, (-4., 2., -.5))
             passed('clock_reset_requires_new_evidence_and_transform')
+
+            params_file = source.parents[1] / 'config/camera_fail_test_hint.yaml'
+            defaults = yaml.safe_load(params_file.read_text())['mock_recovery_request']['ros__parameters']
+            scene = launch('scene_world', {k: defaults[k] for k in ('vehicle_hint_mode', 'scene_vehicle_frame')})
+            inputs = {'base': (1., 2., math.pi / 2.), 'world_car': (6., 4., .72)}
+            scene.pump(1.4, **inputs)
+            require(not scene.received, 'World car alone anchored a request')
+            scene.pump(.8, **inputs, world_base=(4., 1., 0.), world_age=2.)
+            require(not scene.received, 'Stale world base anchored a request')
+            initial = scene.request(**inputs, world_base=(4., 1., 0.))
+            near(initial.vehicle_hint.x, -2., 'scene initial x')
+            near(initial.vehicle_hint.y, 4., 'scene initial y')
+            check_pose(initial, inputs['base'])
+            scene.ns = 1_000_000_000
+            scene.received.clear()
+            scene.pump(.9, scan=False)
+            scene.received.clear()
+            new_poses = {'base': (0., 0., 0.), 'world_base': (7., 2., -math.pi / 2.)}
+            scene.pump(.8, **new_poses)
+            require(not scene.received, 'Old car pose survived reset')
+            message = scene.request(**new_poses, world_car=inputs['world_car'])
+            near(message.vehicle_hint.x, -2., 'same world car in new odom x')
+            near(message.vehicle_hint.y, -1., 'same world car in new odom y')
+            require(message.request_id != initial.request_id, 'Scene reset reused request ID')
+            check_pose(message, new_poses['base'])
+            passed('scene_world_same_car_two_odom_epochs_requires_fresh_paired_poses')
 
             # A map-to-odom source transform must remain planar. Check real TF
             # messages rather than calling the implementation's validator, and
