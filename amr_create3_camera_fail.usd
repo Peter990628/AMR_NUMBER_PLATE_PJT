@@ -3,22 +3,22 @@
     customLayerData = {
         dictionary cameraSettings = {
             dictionary Front = {
-                double3 position = (5, 0, 0)
-                double radius = 5
+                double3 position = (5, 1.4102564102564092, 0.6820512820512824)
+                double radius = 4.9285839080810545
             }
             dictionary Perspective = {
-                double3 position = (-0.15494980561454003, 1.6458126494188827, 4.7911807060776965)
-                double3 target = (2.5000002572611066, 1.2999996490416832, 1.6788791068478304e-7)
+                double3 position = (-2.1675991654242126, 1.4152280602643776, 5.401496918521234)
+                double3 target = (5.934548169771663, 0.1467649660283754, -0.39075313130889455)
             }
             dictionary Right = {
                 double3 position = (0, -5, 0)
                 double radius = 5
             }
             dictionary Top = {
-                double3 position = (0, 0, 5)
-                double radius = 5
+                double3 position = (4.262017749492939, 0.8190427860357811, 5)
+                double radius = 10.441181945800782
             }
-            string boundCamera = "/OmniverseKit_Persp"
+            string boundCamera = "/OmniverseKit_Top"
         }
         dictionary omni_layer = {
             string authoring_layer = "./amr_create3_camera_fail.usd"
@@ -47,7 +47,9 @@ def Xform "Environment" (
 {
 }
 
-def PhysicsScene "PhysicsScene"
+def PhysicsScene "PhysicsScene" (
+    prepend apiSchemas = ["PhysxSceneAPI"]
+)
 {
 }
 
@@ -59,6 +61,18 @@ def "Graph"
     {
         over "SceneVehiclePoses"
         {
+            custom string inputs:nodeNamespace
+            custom rel inputs:parentPrim (
+                customData = {
+                    dictionary omni = {
+                        dictionary graph = {
+                            string relType = "target"
+                        }
+                    }
+                }
+            )
+            custom string inputs:qosProfile
+            custom uint64 inputs:queueSize
             custom rel inputs:targetPrims = [
                 </create3/base_link/scene_base>,
                 </World/sedan_car>,
@@ -71,8 +85,14 @@ def Xform "create3" (
     references = @https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Robots/iRobot/Create3/create_3.usd@</create3>
 )
 {
-    quatd xformOp:orient = (0.9205048535, 0, 0, -0.3907311285)
-    double3 xformOp:translate = (0.9599841168, 3.1452550204, 0)
+    string isaac:namespace (
+        displayName = "Namespace"
+        doc = "Namespace of the prim in Isaac Sim"
+    )
+    quatd xformOp:orient = (0.9205048535, 0, 0, -0.3907311283772302)
+    double3 xformOp:scale = (1, 1, 1)
+    double3 xformOp:translate = (3.1901485841422237, 2.9855559883341645, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
     over "base_link"
     {
@@ -160,6 +180,16 @@ def Xform "create3" (
         over "articulation_controller_01"
         {
             custom rel inputs:targetPrim = </create3>
+        }
+
+        over "joint_name_array"
+        {
+            custom token inputs:input0
+            delete token inputs:input0.connect = </create3/differential_drive/joint_wheel_left_name.inputs:value>
+            prepend token inputs:input0.connect = </create3/differential_drive/joint_wheel_left_name.inputs:value>
+            custom token inputs:input1
+            delete token inputs:input1.connect = </create3/differential_drive/joint_wheel_right_name.inputs:value>
+            prepend token inputs:input1.connect = </create3/differential_drive/joint_wheel_right_name.inputs:value>
         }
     }
 
@@ -260,6 +290,7 @@ def Xform "create3" (
                     }
                 }
             )
+            custom bool inputs:enabled
             custom uint inputs:execIn
             uint inputs:execIn.connect = </create3/sensors/Once.outputs:step>
             custom uint inputs:height = 1200
@@ -278,15 +309,26 @@ def Xform "create3" (
         {
             custom uint64 inputs:context
             uint64 inputs:context.connect = </create3/sensors/Context.outputs:context>
+            custom bool inputs:enabled
+            custom bool inputs:enableSemanticLabels
             custom uint inputs:execIn
             uint inputs:execIn.connect = </create3/sensors/CameraRender.outputs:execOut>
             custom string inputs:frameId = "front_stereo_camera_left_optical"
+            custom uint inputs:frameSkipCount
+            custom string inputs:nodeNamespace
+            custom string inputs:qosProfile
+            custom uint64 inputs:queueSize
             custom token inputs:renderProductPath
             token inputs:renderProductPath.connect = </create3/sensors/CameraRender.outputs:renderProductPath>
             custom bool inputs:resetSimulationTimeOnStop = 1
+            custom string inputs:semanticLabelsTopicName
+            custom float2 inputs:stereoOffset
             custom string inputs:topicName = "/front_stereo_camera/left/image_raw"
-            custom token inputs:type = "rgb"
+            custom token inputs:type = "rgb" (
+                allowedTokens = ["rgb", "depth", "depth_pcl", "instance_segmentation", "semantic_segmentation", "bbox_2d_tight", "bbox_2d_loose", "bbox_3d"]
+            )
             custom bool inputs:useSystemTime = 0
+            custom token inputs:viewport
             token node:type = "isaacsim.ros2.bridge.ROS2CameraHelper"
             int node:typeVersion = 2
         }
@@ -295,13 +337,21 @@ def Xform "create3" (
         {
             custom uint64 inputs:context
             uint64 inputs:context.connect = </create3/sensors/Context.outputs:context>
+            custom bool inputs:enabled
             custom uint inputs:execIn
             uint inputs:execIn.connect = </create3/sensors/CameraRender.outputs:execOut>
             custom string inputs:frameId = "front_stereo_camera_left_optical"
+            custom string inputs:frameIdRight
+            custom uint inputs:frameSkipCount
+            custom string inputs:nodeNamespace
+            custom string inputs:qosProfile
+            custom uint64 inputs:queueSize
             custom token inputs:renderProductPath
             token inputs:renderProductPath.connect = </create3/sensors/CameraRender.outputs:renderProductPath>
+            custom token inputs:renderProductPathRight
             custom bool inputs:resetSimulationTimeOnStop = 1
             custom string inputs:topicName = "/front_stereo_camera/left/camera_info"
+            custom string inputs:topicNameRight
             custom bool inputs:useSystemTime = 0
             token node:type = "isaacsim.ros2.bridge.ROS2CameraInfoHelper"
             int node:typeVersion = 1
@@ -369,6 +419,75 @@ def "Render" (
                 custom bool overrideClipRange = 0
                 uniform int2 resolution = (1, 1)
             }
+
+            def RenderProduct "omni_kit_widget_viewport_ViewportTexture_0" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </OmniverseKit_Top>
+                token omni:rtx:background:source:texture:textureMode = "repeatMirrored"
+                token omni:rtx:background:source:type = "domeLight"
+                bool omni:rtx:dlss:frameGeneration = 0
+                bool omni:rtx:material:db:nonVisualMaterialCSV:enabled = 0
+                bool omni:rtx:material:db:syncLoads = 1
+                token omni:rtx:post:dlss:execMode = "performance"
+                bool omni:rtx:post:registeredCompositing:invertColorCorrection = 1
+                bool omni:rtx:post:registeredCompositing:invertToneMap = 1
+                bool omni:rtx:pt:lightcache:cached:dontResolveConflicts = 1
+                int omni:rtx:pt:maxSamplesPerLaunch = 2073600
+                int omni:rtx:pt:mgpu:maxPixelsPerRegionExponent = 12
+                color3f omni:rtx:rt:ambientLight:color = (0.1, 0.1, 0.1)
+                bool omni:rtx:rt:demoire = 0
+                bool omni:rtx:rt:ecoMode:enabled
+                bool omni:rtx:rt:lightcache:spatialCache:dontResolveConflicts = 1
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                bool omni:rtx:scene:hydra:mdlMaterialWarmup = 1
+                bool omni:rtx:shadows:enabled = 0
+                uint omni:rtx:viewTile:limit = 4294967295
+                rel orderedVars = </Render/Vars/LdrColor>
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (512, 512)
+            }
+
+            def RenderProduct "Replicator_02" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </create3/base_link/Camera>
+                custom string ogPostProcessPath = "/Render/OmniverseKit/HydraTextures/Replicator_02/PostRender"
+                bool omni:rtx:material:db:syncLoads = 1
+                bool omni:rtx:rt:ecoMode:enabled = 0
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                rel orderedVars = [
+                    </Render/Vars/LdrColorSD>,
+                    </Render/Vars/LdrColor>,
+                ]
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1920, 1200)
+            }
+
+            def RenderProduct "Replicator_03" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </create3/base_link/observation_lidar/Scanner>
+                custom string ogPostProcessPath = "/Render/OmniverseKit/HydraTextures/Replicator_03/PostRender"
+                bool omni:rtx:material:db:syncLoads = 1
+                bool omni:rtx:rt:ecoMode:enabled = 0
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                rel orderedVars = [
+                    </Render/Vars/GenericModelOutput>,
+                    </Render/Vars/RtxSensorMetadata>,
+                ]
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1, 1)
+            }
         }
     }
 
@@ -380,6 +499,9 @@ def "Render" (
         rel products = [
             </Render/OmniverseKit/HydraTextures/Replicator>,
             </Render/OmniverseKit/HydraTextures/Replicator_01>,
+            </Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0>,
+            </Render/OmniverseKit/HydraTextures/Replicator_02>,
+            </Render/OmniverseKit/HydraTextures/Replicator_03>,
         ]
     }
 
