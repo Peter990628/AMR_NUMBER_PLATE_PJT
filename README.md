@@ -2,7 +2,16 @@
 
 Isaac Sim과 ROS 2를 이용한 C++ AMR 번호판 재관측 프로젝트. 번호판 관측이 실패했을 때 센서 정보로 재접근 위치를 정하고, 이동 후 다시 관측하는 알고리즘을 개발한다.
 
-현재 구현은 **4단계의 관측 후보 생성·회전 비교·연속 관측 확인**까지다. LiDAR 전처리·측면 후보 추정과 C++ 번호판 품질 판정에 이어, 측면 양 끝의 관측 후보를 계산하고 RViz에 표시한다. 회전 전후 평균 위치 비교는 통과했으며, 순간 후보 급변을 거부하고 3회 일관된 관측 후 채택하는 확인 단계를 추가했다. 후면 선택, 로봇 장착 위치를 고려한 주행 목표 변환, 충돌·경로 검사와 자동 이동 제어는 이후 단계다.
+준비된 실험 PC에서 Isaac Sim에 `amr_camera_fail.usd`를 열고 실패 배치에서 Play한 뒤,
+터미널에서 다음 명령을 실행한다. 현재 위치에서 번호판을 읽을 수 없으면 CFV와 LiDAR로
+재관측 후보를 선택하고, 이동 후 OCR을 다시 확인한다.
+
+```bash
+~/peter_pjt/run_recovery_test.sh --execute
+```
+
+실행할 때마다 `local_artifacts/recovery_runs/`에 전후 사진, 판독 결과, 이동·센서 기록을 저장한다.
+기본 차량 힌트의 좌표계와 다른 배치에서의 실행 방법은 [통합 실험 안내](ros2_ws/src/amr_reobservation/docs/single_candidate_ocr_recovery.md)를 참고한다.
 
 - 환경: Ubuntu 22.04, ROS 2 Humble, Isaac Sim 5.1, C++17.
 - [`ros2_ws/src/amr_reobservation`](ros2_ws/src/amr_reobservation/README.md): C++ 코드, 빌드·실행 방법, 테스트, 파라미터 설명.

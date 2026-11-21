@@ -47,6 +47,17 @@ ros2 topic echo /reobservation/preview --once
 ROS_DOMAIN_ID=89 ROS_LOCALHOST_ONLY=1 python3 src/amr_reobservation/test/smoke_recovery_preview.py
 ```
 
+## AMR 시작 자세를 바꾸는 실험의 차량 고정 좌표
+
+`vehicle_hint_mode: fixed_frame`으로 차량 위치를 고정 좌표계에서 입력할 수 있다.
+차량 힌트는 AMR 시작 자세와 독립적이고, 접근 자세는 매 실험의 초기 TF에서 새로 읽는다.
+`config/mock_recovery_request_fixed.yaml`에 입력 프레임과 차량 XY를 지정한다.
+기존 `anchor_base` 방식은 기본값으로 유지된다.
+
+다른 입력 프레임을 지정하면 스캔 시각의 TF가 필요하며, 변환이 없으면 요청을 발행하지 않는다.
+Isaac의 `odom`은 Stop → Play 때 원점이 바뀔 수 있으므로 동일 좌표 재사용은 해당 좌표계가
+유지되는 구간으로 한정한다. [설정·실행 및 재시작 주의점](docs/fixed_vehicle_hint.md)을 참고한다.
+
 ## 관측 후보 선택과 제한된 시뮬레이터 이동 실험
 
 프로젝트 루트의 `tools/run_recovery_trial.py`는 정지 상태의 관측으로 시험할 후보를 고정하고, 요청한 경우 Isaac Sim에서 순서대로 이동하여 번호판 관측 품질을 비교하는 실험 도구다. **기본 실행은 선택·기록만 수행한다. `--execute`를 붙였을 때만 실제 시뮬레이터에 속도 명령을 보낸다.** 일반 주행 서비스나 Nav2 목표 생성기는 아니다.

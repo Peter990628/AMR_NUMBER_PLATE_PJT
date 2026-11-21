@@ -46,9 +46,45 @@ OCR을 수행하거나 세 번째 일치 즉시 중간에 움직이는 구조는
 
 ## 실행
 
+### Isaac Sim에서 한 명령으로 실험하기
+
+빌드와 모델 준비가 끝난 이 노트북에서는 Isaac Sim에 `amr_camera_fail.usd`를 열고,
+실패를 재현할 시작 자세에 AMR을 두고 Play한다. 일반 터미널 하나에서 실행한다.
+
+```bash
+~/peter_pjt/run_recovery_test.sh --execute
+```
+
+스크립트가 ROS 2 Humble과 프로젝트 작업공간을 불러온다. 기본 도메인은 0이고
+기본 RMW는 Fast DDS다. 검출, 요청 발행, 후보 생성, CFV, 이동 제어, OCR, 센서 기록은
+실행기가 관리한다. 현재 자리에서 이미 판독에 성공하면 거기서 종료한다.
+같은 출발 조건으로 반복하려면 AMR을 실패 자세에 다시 놓고 같은 명령을 실행한다.
+인자 없이 실행하면 모델과 설정 파일 경로를 확인한다.
+
+기본 [차량 힌트](../config/camera_fail_test_hint.yaml)는 11월 20일 성공 배치에서 확인한
+`odom` 기준 차량 위치다. 같은 좌표계에서 AMR만 움직일 때는 그대로 쓸 수 있다.
+차량 위치나 `odom` 원점이 달라졌다면 [새 배치의 차량 힌트](fixed_vehicle_hint.md)를
+`--mock-params /경로/차량힌트.yaml`로 전달한다. 목표 위치와 회전각은 매번 새로 계산한다.
+
+터미널에 이번 실험의 폴더가 표시된다. 각 실행은 `local_artifacts/recovery_runs/` 아래
+별도 폴더에 저장된다. Ctrl+C로 중단해도 실행기는 시작한 프로세스를 정리하고 결과를 기록한다.
+
+| 확인할 내용 | 실험 폴더 안의 경로 |
+|---|---|
+| 성공·실패, 읽은 번호, 시작·종료 자세 | `result.json` |
+| 이동 전후 카메라 사진과 OCR 판정 | `controller/before_capture/`, `controller/after_capture/`, `controller/before_ocr/report.json`, `controller/after_ocr/report.json` |
+| 선택한 목표·조준점, 이동 중 자세와 명령 | `controller/selection.json`, `controller/events.jsonl` |
+| CFV 방향 추정에 쓴 사진과 예측값 | `controller/cfv_capture/`, `controller/cfv_inference/predictions.csv` |
+| 관측·전방·후방 LiDAR 원본, odom, 시계, TF | `sensors/` (ROS 2 bag). `result.json`의 `sensor_bag_finalized`로 기록 마무리를 확인한다. |
+
+도달한 단계의 파일만 생성된다. 예를 들어 출발 위치에서 이미 읽혔다면 이동 후 사진은 없다.
+
+### 직접 실행하기
+
 현재 PC의 로컬 CFV/PaddleOCR 모델·환경 경로를 기본값으로 사용한다.
 다른 PC에서는 `--config paths.json`으로 경로를 지정한다. 재학습·다운로드·외부 OCR API는 없다.
-Python 도구와 기존 설치 노드를 연결하므로 이번 추가 기능 때문에 colcon 재빌드는 필요하지 않다.
+Python 실행기는 설치된 노드를 연결한다. mock 입력 노드·설정 파일을 변경했다면
+`colcon build --symlink-install --packages-select amr_reobservation`으로 설치에도 반영한다.
 
 ```bash
 cd ~/peter_pjt
@@ -73,8 +109,11 @@ export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
   --output local_artifacts/single_recovery_01
 ```
 
-`--mock-params`는 명시적인 수동 차량 힌트다. 저장된 실패 배치와 다른 곳에 AMR을 놓았다면
-기본 `(3.5, 0.4)m` 힌트를 그대로 사용하지 않는다. 힌트는 시작 자세에서 한 번 `odom`으로 고정된다.
+`--mock-params`는 명시적인 수동 차량 힌트다. 기본 `anchor_base` 모드에서는 저장된 실패 배치와
+다른 곳에 AMR을 놓았다면 `(3.5, 0.4)m` 힌트를 그대로 사용하지 않는다. 힌트는 시작 자세에서
+한 번 `odom`으로 고정된다. AMR 시작 자세와 독립적인 차량 XY를 입력하려면
+[고정 좌표 설정](fixed_vehicle_hint.md)의 `vehicle_hint_mode: fixed_frame` 파일을 같은 옵션에
+전달한다. 다른 Play 구간에서 `odom` 좌표를 그대로 재사용해도 된다는 뜻은 아니다.
 출력 폴더에는 mock과 preview의 600초 유효기간을 설정한 실행용 복사본을 저장한다.
 
 상위 로직에서 실제 `RecoveryRequest`를 주는 경우에는 `--mock-params`를 생략한다.

@@ -1,0 +1,20 @@
+# Vehicle hint measured for the November 20 test placement in amr_camera_fail.usd.
+# Reuse while the parked vehicle has this position in odom. A new odom origin
+# or different parking position needs a new hint in that frame.
+mock_recovery_request:
+  ros__parameters:
+    use_sim_time: true
+    fixed_frame: odom
+    base_frame: base_link
+    scan_topic: /observation_lidar/scan
+    request_topic: /reobservation/request
+    target_id: manual_failure_vehicle
+    failure_reason: not_detected
+    vehicle_hint_mode: fixed_frame
+    vehicle_hint_frame: odom
+    vehicle_hint_x_m: 2.9743665329174673
+    vehicle_hint_y_m: -0.43981965693103253
+    approach_x_in_anchor_base_m: 0.0
+    approach_y_in_anchor_base_m: 0.0
+    approach_yaw_from_anchor_deg: 0.0
+    valid_for_sec: 300.0

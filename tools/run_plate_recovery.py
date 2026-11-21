@@ -5,12 +5,14 @@ No --execute: check local dependencies and print configuration; no ROS or motion
 --execute: own detector/preview/controller lifetimes, hold final pose, return JSON.
 """
 import argparse
+from datetime import datetime
 import json
 import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
 from recovery_ocr_session import ROOT, stop_process
@@ -45,7 +47,10 @@ def graph_preflight(mock):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--output', type=Path,
+                        help='New run directory (default: dated folder in local_artifacts/recovery_runs)')
+    parser.add_argument('--record-sensors', action='store_true',
+                        help='Record LiDAR, odometry, clock and TF to sensors/ during the trial')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--mock-params', type=Path,
                         help='Explicit manual vehicle-hint fixture; otherwise require upstream RecoveryRequest')
@@ -64,21 +69,31 @@ def main():
     config = {k:str(Path(v).absolute()) for k,v in config.items()}
     for path in [*config.values(), args.model_path, args.preview_params, *([args.mock_params] if args.mock_params else [])]:
         if not Path(path).exists(): parser.error('Missing local dependency: '+str(path))
-    if args.output.exists(): parser.error('Use a new output directory')
+    if args.output and args.output.exists(): parser.error('Use a new output directory')
     if not args.execute:
         print(json.dumps({'status':'configuration_checked', 'motion_enabled':False,
                           'context':'explicit_mock' if args.mock_params else 'upstream_request',
-                          'dependencies':config}, indent=2))
+                          'mock_params':str(args.mock_params) if args.mock_params else None,
+                          'record_sensors':args.record_sensors, 'dependencies':config}, indent=2))
         return 0
-    output = args.output.resolve(); output.mkdir(parents=True)
+    if args.output:
+        output = args.output.resolve()
+        output.mkdir(parents=True)
+    else:
+        runs = ROOT/'local_artifacts/recovery_runs'
+        runs.mkdir(parents=True, exist_ok=True)
+        output = Path(tempfile.mkdtemp(prefix=datetime.now().strftime('%Y%m%d_%H%M%S_'), dir=runs))
+    print(f'실험 기록 폴더: {output}', file=sys.stderr, flush=True)
+    os.environ.setdefault('ROS_LOG_DIR', str(output/'ros_logs'))
     (output/'config.json').write_text(json.dumps(config, indent=2)+'\n')
     owned = []; logs = []
+    final_report = {}
     result = {'status':'aborted', 'success':False, 'text':None, 'candidate_attempts':0,
               'context':'explicit_mock' if args.mock_params else 'upstream_request'}
     def spawn(argv, name):
         stream = (output/(name+'.log')).open('w'); logs.append(stream)
         process = subprocess.Popen([str(a) for a in argv], cwd=ROOT, stdout=stream,
-                                   stderr=subprocess.STDOUT, start_new_session=True)
+                                   stdin=subprocess.DEVNULL, stderr=subprocess.STDOUT, start_new_session=True)
         owned.append((name, process)); return process
     def interrupt(signum, frame):
         raise KeyboardInterrupt(signal.Signals(signum).name)
@@ -95,6 +110,12 @@ def main():
             fixture['mock_recovery_request']['ros__parameters'].update(valid_for_sec=600., max_wall_age_sec=600.)
             (output/'mock.yaml').write_text(yaml.safe_dump(fixture))
             mock_args = ['mock:=true', 'mock_params_file:='+str(output/'mock.yaml')]
+        if args.record_sensors:
+            # The motion guard requires Isaac to be the only /cmd_vel subscriber.
+            # The controller already writes its command history to events.jsonl.
+            spawn(['ros2', 'bag', 'record', '-o', output/'sensors',
+                   '/observation_lidar/scan', '/front_2d_lidar/scan', '/back_2d_lidar/scan',
+                   '/chassis/odom', '/clock', '/tf', '/tf_static'], 'sensor_recorder')
         spawn(['ros2', 'launch', 'amr_reobservation', 'plate_observation.launch.py',
                'model_path:='+str(args.model_path.resolve())], 'detector')
         spawn(['ros2', 'launch', 'amr_reobservation', 'recovery_preview.launch.py', 'rviz:=false',
@@ -105,8 +126,9 @@ def main():
         deadline = time.monotonic()+560
         last_stage = None
         while runner.poll() is None:
-            if any(p.poll() is not None for name,p in owned if name!='controller'):
-                raise RuntimeError('companion_node_exited')
+            for name, process in owned:
+                if name != 'controller' and process.poll() is not None:
+                    raise RuntimeError(f'companion_node_exited:{name}')
             if time.monotonic() >= deadline: raise RuntimeError('session_timeout')
             report_path = output/'controller/report.json'
             if report_path.exists():
@@ -118,13 +140,11 @@ def main():
                 except json.JSONDecodeError:
                     pass  # controller may be replacing its progress report
             time.sleep(.1)
-        report = json.loads((output/'controller/report.json').read_text())
-        result.update({k:report.get(k) for k in ('status','success','text','candidate_attempts','error',
-                      'request','initial_pose','final_pose','final_measured_twist','guard_exit_code',
-                      'before_ocr','after_ocr','elapsed_wall_sec')})
-        if runner.returncode not in (0,2) or report.get('guard_exit_code') != 0:
+        final_report = json.loads((output/'controller/report.json').read_text())
+        result.update({k:final_report.get(k) for k in ('status','success','text','error')})
+        if runner.returncode not in (0,2) or final_report.get('guard_exit_code') != 0:
             result.update(status='aborted', success=False, text=None,
-                          error=report.get('error') or 'controller_or_guard_failed')
+                          error=final_report.get('error') or 'controller_or_guard_failed')
     except (Exception, KeyboardInterrupt) as error:
         result.update(status='aborted', success=False, text=None, error=str(error) or type(error).__name__)
     finally:
@@ -137,11 +157,32 @@ def main():
                 cleanup[name] = str(error)
                 result.update(status='aborted', success=False, text=None, error='cleanup_failed')
         result['owned_process_exit_codes'] = cleanup
+        # On Ctrl+C the controller writes its last pose and completed OCR phases
+        # while it stops. Keep those measurements with the launcher's stop reason.
+        report_path = output/'controller/report.json'
+        if not final_report and report_path.is_file():
+            try:
+                final_report = json.loads(report_path.read_text())
+            except (OSError, ValueError):
+                pass  # The owner may have stopped before the controller finished its report.
+        for key in ('candidate_attempts', 'request', 'initial_pose', 'final_pose',
+                    'final_measured_twist', 'guard_exit_code', 'before_ocr', 'after_ocr',
+                    'elapsed_wall_sec'):
+            result[key] = final_report.get(key, result.get(key))
+        if args.record_sensors:
+            result['sensor_bag_finalized'] = (output/'sensors/metadata.yaml').is_file()
+            if 'sensor_recorder' in cleanup and not result['sensor_bag_finalized']:
+                print(f"센서 기록 마무리 실패. 로그: {output/'sensor_recorder.log'}",
+                      file=sys.stderr, flush=True)
         for stream in logs: stream.close()
         for number, handler in previous.items(): signal.signal(number, handler)
         (output/'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2)+'\n')
         print(json.dumps(result, ensure_ascii=False), flush=True)
-    return 0 if result['success'] else 1 if result['status']=='aborted' else 2
+        print(f"결과: {result['status']} | 번호판: {result['text'] or '—'} | {output/'result.json'}",
+              file=sys.stderr, flush=True)
+    if result['status']=='aborted' or (args.record_sensors and not result['sensor_bag_finalized']):
+        return 1
+    return 0 if result['success'] else 2
 
 
 if __name__ == '__main__':

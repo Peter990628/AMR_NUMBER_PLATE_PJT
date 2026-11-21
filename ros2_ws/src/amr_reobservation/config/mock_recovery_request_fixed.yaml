@@ -1,0 +1,25 @@
+# Manual stationary vehicle position, independent of the AMR's starting pose.
+# Set BOTH coordinates below before use. No default vehicle position is guessed.
+# Copy this file to local_artifacts/ for scene-specific values.
+# Coordinates are in vehicle_hint_frame, NOT necessarily Isaac USD world.
+# If that frame differs from fixed_frame, a planar scan-time TF is required.
+# Reuse across Stop/Play only when the source frame retains its physical origin.
+mock_recovery_request:
+  ros__parameters:
+    use_sim_time: true
+    fixed_frame: odom
+    base_frame: base_link
+    scan_topic: /observation_lidar/scan
+    request_topic: /reobservation/request
+    target_id: manual_failure_vehicle
+    failure_reason: not_detected
+    vehicle_hint_mode: fixed_frame
+    vehicle_hint_frame: odom
+    # Uncomment and replace with the measured vehicle hint in the frame above.
+    # vehicle_hint_x_m: 0.0
+    # vehicle_hint_y_m: 0.0
+    # Approach is read afresh from the initial AMR pose for each trial.
+    approach_x_in_anchor_base_m: 0.0
+    approach_y_in_anchor_base_m: 0.0
+    approach_yaw_from_anchor_deg: 0.0
+    valid_for_sec: 300.0

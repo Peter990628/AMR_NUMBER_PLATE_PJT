@@ -11,6 +11,7 @@ mock_recovery_request:
     request_topic: /reobservation/request
     target_id: manual_failure_vehicle
     failure_reason: not_detected
+    vehicle_hint_mode: anchor_base
     vehicle_hint_x_in_anchor_base_m: 3.5
     vehicle_hint_y_in_anchor_base_m: 0.4
     approach_x_in_anchor_base_m: 0.0
