@@ -8,7 +8,7 @@
             }
             dictionary Perspective = {
                 double3 position = (-2.1675991654242126, 1.4152280602643776, 5.401496918521234)
-                double3 target = (5.934548169771663, 0.1467649660283754, -0.39075313130889455)
+                double3 target = (5.9345489317742715, 0.14676484673010282, -0.39075203930083546)
             }
             dictionary Right = {
                 double3 position = (0, -5, 0)
@@ -16,7 +16,7 @@
             }
             dictionary Top = {
                 double3 position = (4.262017749492939, 0.8190427860357811, 5)
-                double radius = 10.441181945800782
+                double radius = 9.758153533935547
             }
             string boundCamera = "/OmniverseKit_Top"
         }
@@ -488,6 +488,44 @@ def "Render" (
                 custom bool overrideClipRange = 0
                 uniform int2 resolution = (1, 1)
             }
+
+            def RenderProduct "Replicator_04" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </create3/base_link/Camera>
+                custom string ogPostProcessPath = "/Render/OmniverseKit/HydraTextures/Replicator_04/PostRender"
+                bool omni:rtx:material:db:syncLoads = 1
+                bool omni:rtx:rt:ecoMode:enabled = 0
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                rel orderedVars = [
+                    </Render/Vars/LdrColorSD>,
+                    </Render/Vars/LdrColor>,
+                ]
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1920, 1200)
+            }
+
+            def RenderProduct "Replicator_05" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </create3/base_link/observation_lidar/Scanner>
+                custom string ogPostProcessPath = "/Render/OmniverseKit/HydraTextures/Replicator_05/PostRender"
+                bool omni:rtx:material:db:syncLoads = 1
+                bool omni:rtx:rt:ecoMode:enabled = 0
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                rel orderedVars = [
+                    </Render/Vars/GenericModelOutput>,
+                    </Render/Vars/RtxSensorMetadata>,
+                ]
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1, 1)
+            }
         }
     }
 
@@ -502,6 +540,8 @@ def "Render" (
             </Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0>,
             </Render/OmniverseKit/HydraTextures/Replicator_02>,
             </Render/OmniverseKit/HydraTextures/Replicator_03>,
+            </Render/OmniverseKit/HydraTextures/Replicator_04>,
+            </Render/OmniverseKit/HydraTextures/Replicator_05>,
         ]
     }
 

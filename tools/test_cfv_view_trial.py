@@ -2,7 +2,7 @@ import copy
 import math
 import unittest
 
-from cfv_view_trial import CREATE3_AFTER_CORNER_LIMITS, choose_view_snapshot, validate_view_leases
+from cfv_view_trial import CREATE3_EXTENDED_LEG_LIMITS, choose_view_snapshot, validate_view_leases
 from recovery_selection import CandidateSelector, SelectionConfig
 from test_recovery_selection import snapshot, pose
 
@@ -105,7 +105,7 @@ class ViewCSelectionTests(unittest.TestCase):
             args = (selected, preview, context, 10.3)
             initial = choose_view_snapshot(*args, fresh_close=True)
             self.assertEqual(initial['status'], 'view_target_outside_bound')
-            second = choose_view_snapshot(*args, fresh_close=True, limits=CREATE3_AFTER_CORNER_LIMITS)
+            second = choose_view_snapshot(*args, fresh_close=True, limits=CREATE3_EXTENDED_LEG_LIMITS)
             self.assertEqual(second['status'], expected)
             if expected == 'ready':
                 distance = second['queue'][0]['translation_m']

@@ -26,7 +26,7 @@ from recovery_trial_budget import assess_translation_budget
 from recovery_trial_metrics import ObservationWindow, match_measurement_image
 from cfv_trial_selection import load_context, choose_cfv_snapshot
 from cfv_view_trial import choose_view_snapshot, validate_view_leases, LIMITS as VIEW_LIMITS
-from cfv_view_trial import CLOSE_LIMITS, CREATE3_AFTER_CORNER_LIMITS
+from cfv_view_trial import CLOSE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS
 
 
 def stamp_ns(header):
@@ -649,7 +649,12 @@ def run(args):
                 result['corner_cfv_context' if at_corner else 'cfv_context'] = {
                     k:v for k,v in cfv_context.items() if k!='reference_preview'}
             def select_probe(beyond_corner_m, wait_sec):
+                nonlocal leg_limits
                 from corner_probe import wait_for_corner_probe
+                if args.robot == 'create3' and beyond_corner_m == 1.0:
+                    leg_limits = CREATE3_EXTENDED_LEG_LIMITS
+                    result['motion_limits'].update(target_radius_m=leg_limits['target_radius_m'],
+                                                   radius_from_start_m=leg_limits['motion_radius_m'])
                 event('corner_probe_observe', beyond_corner_m=beyond_corner_m, wait_sec=wait_sec)
                 probe = wait_for_corner_probe(previews, cfv_context, lambda: now_ns()/1e9,
                                               stationary_pump(current()), wait_sec=wait_sec,
@@ -689,7 +694,7 @@ def run(args):
                 limits['initial_target_radius_m'] = leg_limits['target_radius_m']
                 limits['initial_motion_radius_m'] = leg_limits['motion_radius_m']
                 if args.robot == 'create3':
-                    leg_limits = CREATE3_AFTER_CORNER_LIMITS
+                    leg_limits = CREATE3_EXTENDED_LEG_LIMITS
                 limits['target_radius_m'] = leg_limits['target_radius_m']
                 limits['radius_from_leg_origin_m'] = leg_limits['motion_radius_m']
                 limits['radius_from_start_m'] = math.dist(initial[0][:2], corner_origin[:2]) + leg_limits['motion_radius_m']
@@ -899,8 +904,8 @@ if __name__=='__main__':
     parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
                         help='Driving speed for single OCR recovery in Isaac Sim')
     probes=parser.add_mutually_exclusive_group()
-    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35), metavar='METRES',
-                        help='After end-face selection times out, probe 0.15 or 0.35 m beyond the corner (default 0.35)')
+    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35, 0.50, 1.00), metavar='METRES',
+                        help='After end-face selection times out, probe 0.15, 0.35, 0.50 or 1.00 m beyond the corner (default 0.35)')
     probes.add_argument('--corner-probe-plus-30cm',action='store_true',
                         help='Only try the comparison viewpoint 0.65 m beyond the observed corner')
     context_group=parser.add_mutually_exclusive_group()

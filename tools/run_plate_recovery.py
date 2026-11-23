@@ -62,8 +62,8 @@ def main():
     parser.add_argument('--speed', choices=MOTION_SPEEDS,
                         help='Driving speed for Isaac Sim recovery')
     probes = parser.add_mutually_exclusive_group()
-    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35), metavar='METRES',
-                        help='After end-face selection times out, probe 0.15 or 0.35 m beyond the corner (default 0.35)')
+    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35, 0.50, 1.00), metavar='METRES',
+                        help='After end-face selection times out, probe 0.15, 0.35, 0.50 or 1.00 m beyond the corner (default 0.35)')
     probes.add_argument('--corner-probe-plus-30cm', action='store_true',
                         help='Compare a side-only viewpoint 0.65 m beyond the observed corner')
     parser.add_argument('--mock-params', type=Path,
