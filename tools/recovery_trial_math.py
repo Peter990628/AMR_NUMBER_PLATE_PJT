@@ -157,27 +157,29 @@ class PoseController:
         self.xy_tolerance, self.yaw_tolerance = xy_tolerance, yaw_tolerance
         self.phase = 'turn'
 
+    def at_goal_position(self, current):
+        return self.phase in ('align', 'done') or math.dist(current[:2], self.target[:2]) <= self.xy_tolerance
+
     def command(self, current):
         if not finite_pose(current):
             raise ValueError('nonfinite current pose')
         if self.phase == 'done':
             return 0., 0.
-        dx, dy = self.target[0]-current[0], self.target[1]-current[1]
-        distance = math.hypot(dx, dy)
         # Once within XY tolerance, finish turning in place even if odometry drifts.
-        if self.phase == 'align' or distance <= self.xy_tolerance:
+        if self.at_goal_position(current):
             self.phase = 'align'
             final_error = angle(self.target[2]-current[2])
             if abs(final_error) <= self.yaw_tolerance:
                 self.phase = 'done'
                 return 0., 0.
             return 0., max(-self.max_angular, min(self.max_angular, final_error))
+        dx, dy = self.target[0]-current[0], self.target[1]-current[1]
         heading_error = angle(math.atan2(dy, dx)-current[2])
         if abs(heading_error) > math.radians(5):
             self.phase = 'turn'
             return 0., max(-self.max_angular, min(self.max_angular, heading_error))
         self.phase = 'drive'
-        return min(self.max_linear, .8*distance), max(-.18, min(.18, 1.2*heading_error))
+        return min(self.max_linear, .8*math.hypot(dx, dy)), max(-.18, min(.18, 1.2*heading_error))
 
 
 class RotationController:

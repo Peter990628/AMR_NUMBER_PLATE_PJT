@@ -52,6 +52,14 @@ def observe_buffered_preview(selector, preview, receipt_wall_sec, now_ros_sec):
                             now_wall_sec=receipt_wall_sec)
 
 
+def requires_contour_hold(robot, leg, preview, controller, pose):
+    if robot != 'create3' or preview.valid:
+        return False
+    # At the fixed OCR position the remaining command only aligns yaw.
+    return not (leg == 'ocr_candidate' and preview.status == 'contour_target_unassociated'
+                and controller.at_goal_position(pose))
+
+
 def require_live_plate(latest, now_ns, event, *, hold=None):
     """A stopped base may wait for a newer source image, including a negative detection."""
     wait_started = None
@@ -439,12 +447,10 @@ def run(args):
             controller=RotationController(target) if args.rotation_only else PoseController(target, speed=args.speed)
             deadline=time.monotonic()+leg_seconds
             progress_wall=time.monotonic(); previous=current(); last_check=0.; min_clearance=safe
-            # One horizontal scanner observes the target and the path. While the
-            # target contour is lost, keep the fixed goal but hold the base still.
             contour_lost_at=None
             while True:
                 health(); pose=current()
-                if args.robot == 'create3' and not latest['preview'][1].valid:
+                if requires_contour_hold(args.robot, label, latest['preview'][1], controller, pose):
                     command()
                     if contour_lost_at is None:
                         contour_lost_at=time.monotonic()

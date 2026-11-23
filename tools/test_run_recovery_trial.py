@@ -4,7 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from recovery_selection import CandidateSelector
-from run_recovery_trial import observe_buffered_preview, require_live_plate
+from recovery_trial_math import PoseController
+from run_recovery_trial import observe_buffered_preview, require_live_plate, requires_contour_hold
 from test_recovery_selection import snapshot
 
 
@@ -38,6 +39,37 @@ class BufferedPreviewTests(unittest.TestCase):
         self.assertEqual(result['queue'], [])
         self.assertEqual(observe_buffered_preview(selector, snapshot(10.8), 1.3, 10.85)
                          ['status'], 'collecting')
+
+
+class FinalAlignmentTests(unittest.TestCase):
+    def test_unassociated_contour_allows_only_final_ocr_alignment(self):
+        controller = PoseController((0., 0., 0.5))
+        miss = SimpleNamespace(valid=False, status='contour_target_unassociated')
+        def hold(leg, pose):
+            return requires_contour_hold('create3', leg, miss, controller, pose)
+
+        self.assertTrue(hold('ocr_candidate', (-0.021, 0., 0.)))
+        for x in (-0.020, -0.021):
+            # At tolerance on arrival, then just outside while turning in place.
+            pose = (x, 0., 0.)
+            self.assertFalse(hold('ocr_candidate', pose))
+            linear, angular = controller.command(pose)
+            self.assertEqual(linear, 0.)
+            self.assertGreater(angular, 0.)
+            self.assertTrue(hold('corner_probe', pose))
+        self.assertFalse(hold('ocr_candidate', (-0.021, 0., 0.5)))
+        self.assertEqual(controller.command((-0.021, 0., 0.5)), (0., 0.))
+        self.assertEqual(controller.phase, 'done')
+
+    def test_other_invalid_previews_still_block_alignment(self):
+        pose = (0., 0., 0.)
+        controller = PoseController((0., 0., 0.5))
+        for status in ('contour_ambiguous_target', 'contour_no_supported_cluster',
+                       'contour_no_supported_segment', 'no_observed_points', 'stale_scan',
+                       'tf_unavailable'):
+            preview = SimpleNamespace(valid=False, status=status)
+            with self.subTest(status=status):
+                self.assertTrue(requires_contour_hold('create3', 'ocr_candidate', preview, controller, pose))
 
 
 class LivePlateTests(unittest.TestCase):
