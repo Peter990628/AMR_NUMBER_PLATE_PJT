@@ -3,6 +3,7 @@ import math
 import unittest
 from unittest.mock import patch
 
+from cfv_view_trial import CREATE3_CORNER_PROBE_LIMITS
 from corner_probe import confirmed_corner_probe, wait_for_corner_probe
 
 
@@ -110,6 +111,20 @@ class CornerProbeTest(unittest.TestCase):
         self.preview['current_pose']['position']['y'] = 1.2
         self.ctx['image_pose'] = self.preview['current_pose']
         self.assertIsNone(comparison())
+
+    def test_create3_long_probe_passes_same_corner_and_respects_total_travel(self):
+        self.preview['current_pose'] = copy.deepcopy(self.preview['current_pose'])
+        self.ctx['image_pose'] = self.preview['current_pose']
+        self.preview['current_pose']['position']['y'] = 1.26
+        frames = self.frames()
+        for overrun, limits in CREATE3_CORNER_PROBE_LIMITS.items():
+            goal = confirmed_corner_probe(frames, self.ctx, 10.24, 20.64, beyond_corner_m=overrun,
+                                          target_radius_m=limits['target_radius_m'])
+            self.assertAlmostEqual(goal['evidence']['position'][1], -overrun)
+            self.assertAlmostEqual(goal['evidence']['step_m'], 1.26 + overrun)
+        self.preview['current_pose']['position']['y'] = 1.31
+        self.assertIsNone(confirmed_corner_probe(self.frames(), self.ctx, 10.24, 20.64, beyond_corner_m=1.5,
+                                                target_radius_m=CREATE3_CORNER_PROBE_LIMITS[1.5]['target_radius_m']))
 
     def test_end_face_or_unstable_corner_does_not_support_probe(self):
         frames = self.frames()

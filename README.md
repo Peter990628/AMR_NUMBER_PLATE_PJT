@@ -15,7 +15,7 @@ Isaac Sim과 ROS 2를 이용한 C++ AMR 번호판 재관측 프로젝트. 번호
 
 Create 3는 왼쪽 Hawk RGB 카메라 한 대와 RPLidar S2E 한 대를 사용한다.
 주행 명령 상한은 0.42m/s, 1.35rad/s다. 차체 옆면만 보일 때 모서리 탐색도
-시험하려면 `--corner-probe-once 0.35`를 붙인다. 0.15, 0.50, 1.00m도 선택할 수 있다. 모서리에 도착해도 OCR이 실패하면
+시험하려면 `--corner-probe-once 0.35`를 붙인다. 0.15, 0.50, 1.00, 1.50m도 선택할 수 있다. 모서리에 도착해도 OCR이 실패하면
 그 자리에서 차량 방향을 다시 추정한다. 같은 끝면이 LiDAR에 3회 연속 잡히고 경로 검사를 통과하면 한 번 더 이동해 판독한다.
 iw.hub와 비교할 때는
 `amr_camera_fail.usd`를 열고 같은 명령에 `--robot iw_hub --speed fast`를 붙인다.

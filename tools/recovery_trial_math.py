@@ -16,6 +16,8 @@ MOTION_SPEEDS = {
     'create3_fast': MotionSpeed(.42, 1.35, .42, 1.35),
 }
 
+CORNER_PROBE_OVERRUNS_M = (0.15, 0.35, 0.50, 1.00, 1.50)
+
 
 class SimulationRobot(NamedTuple):
     scan_topics: tuple

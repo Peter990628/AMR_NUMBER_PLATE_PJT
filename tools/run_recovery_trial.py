@@ -17,7 +17,7 @@ import sys
 import time
 
 from recovery_trial_math import PoseController, RotationController, angle, pose_dict, segment_clearance, preview_allows_frozen_target
-from recovery_trial_math import MOTION_SPEEDS, OBSERVATION_SCAN, SIMULATION_ROBOTS, odom_pose_speeds
+from recovery_trial_math import CORNER_PROBE_OVERRUNS_M, MOTION_SPEEDS, OBSERVATION_SCAN, SIMULATION_ROBOTS, odom_pose_speeds
 from recovery_trial_math import validate_rotation_return
 from recovery_trial_math import bounded_setup_target, guard_graph_ready, validate_trial_motion
 from recovery_selection import CandidateSelector, SelectionConfig, choose_diverse_snapshot
@@ -26,7 +26,7 @@ from recovery_trial_budget import assess_translation_budget
 from recovery_trial_metrics import ObservationWindow, match_measurement_image
 from cfv_trial_selection import load_context, choose_cfv_snapshot
 from cfv_view_trial import choose_view_snapshot, validate_view_leases, LIMITS as VIEW_LIMITS
-from cfv_view_trial import CLOSE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS
+from cfv_view_trial import CLOSE_LIMITS, CREATE3_CORNER_PROBE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS
 
 
 def stamp_ns(header):
@@ -651,8 +651,8 @@ def run(args):
             def select_probe(beyond_corner_m, wait_sec):
                 nonlocal leg_limits
                 from corner_probe import wait_for_corner_probe
-                if args.robot == 'create3' and beyond_corner_m == 1.0:
-                    leg_limits = CREATE3_EXTENDED_LEG_LIMITS
+                if args.robot == 'create3' and beyond_corner_m in CREATE3_CORNER_PROBE_LIMITS:
+                    leg_limits = CREATE3_CORNER_PROBE_LIMITS[beyond_corner_m]
                     result['motion_limits'].update(target_radius_m=leg_limits['target_radius_m'],
                                                    radius_from_start_m=leg_limits['motion_radius_m'])
                 event('corner_probe_observe', beyond_corner_m=beyond_corner_m, wait_sec=wait_sec)
@@ -904,8 +904,8 @@ if __name__=='__main__':
     parser.add_argument('--speed', choices=MOTION_SPEEDS, default='normal',
                         help='Driving speed for single OCR recovery in Isaac Sim')
     probes=parser.add_mutually_exclusive_group()
-    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=(0.15, 0.35, 0.50, 1.00), metavar='METRES',
-                        help='After end-face selection times out, probe 0.15, 0.35, 0.50 or 1.00 m beyond the corner (default 0.35)')
+    probes.add_argument('--corner-probe-once', nargs='?', type=float, const=0.35, choices=CORNER_PROBE_OVERRUNS_M,
+                        help='After end-face selection times out, probe this many metres beyond the corner (default 0.35)')
     probes.add_argument('--corner-probe-plus-30cm',action='store_true',
                         help='Only try the comparison viewpoint 0.65 m beyond the observed corner')
     context_group=parser.add_mutually_exclusive_group()
