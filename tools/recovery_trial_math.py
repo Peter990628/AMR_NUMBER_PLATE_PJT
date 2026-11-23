@@ -160,11 +160,14 @@ class PoseController:
     def command(self, current):
         if not finite_pose(current):
             raise ValueError('nonfinite current pose')
+        if self.phase == 'done':
+            return 0., 0.
         dx, dy = self.target[0]-current[0], self.target[1]-current[1]
         distance = math.hypot(dx, dy)
-        final_error = angle(self.target[2]-current[2])
-        if distance <= self.xy_tolerance:
+        # Once within XY tolerance, finish turning in place even if odometry drifts.
+        if self.phase == 'align' or distance <= self.xy_tolerance:
             self.phase = 'align'
+            final_error = angle(self.target[2]-current[2])
             if abs(final_error) <= self.yaw_tolerance:
                 self.phase = 'done'
                 return 0., 0.

@@ -100,6 +100,21 @@ class TrialMathTests(unittest.TestCase):
         v,w=c.command((0,0,math.pi/2)); self.assertGreater(v,0); self.assertLessEqual(v,.07)
         v,w=c.command((0,.34,math.pi/2)); self.assertEqual(v,0); self.assertLess(w,0)
         self.assertEqual(c.command((0,.34,0)),(0.,0.))
+
+    def test_final_alignment_stays_latched_across_xy_boundary(self):
+        controller = PoseController((0., 0., 0.), speed='create3_fast')
+        for x in (0.02, 0.0200035, 0.019983, 0.0206):
+            with self.subTest(x=x):
+                linear, angular = controller.command((x, 0., -0.45))
+                self.assertEqual(controller.phase, 'align')
+                self.assertEqual(linear, 0.)
+                self.assertAlmostEqual(angular, 0.45)
+
+        self.assertEqual(controller.command((0.0206, 0., 0.01)), (0., 0.))
+        self.assertEqual(controller.phase, 'done')
+        self.assertEqual(controller.command((0.0206, 0., -0.1)), (0., 0.))
+        self.assertEqual(controller.phase, 'done')
+
     def test_mid_path_obstacle_not_just_endpoint(self):
         self.assertAlmostEqual(segment_clearance([(1,.2)],(0,0),(2,0)),.2)
         self.assertAlmostEqual(segment_clearance([(1,.2)],(0,0),(0,0)),math.hypot(1,.2))
