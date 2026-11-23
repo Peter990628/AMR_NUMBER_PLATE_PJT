@@ -44,3 +44,6 @@ float64[] min_observed_distance_m
 int32 marker_aim_index
 # Supplemental live observation status, including stale/missing input.
 string plate_status
+# Same scan and vehicle hint with the approach radius. Used only during motion
+# to a fixed goal. Empty if contour geometry could not be evaluated.
+string approach_contour_status

@@ -557,6 +557,15 @@ def run(report_path=None):
                 node.destroy_client(client)
 
             exercise("one_face_context_and_camera_geometry")
+            # The face midpoint is 3.25m along base X (including the LiDAR offset).
+            for distance, approach_status in ((2.05, "ok"), (2.15, "target_unassociated")):
+                label = f"fixed_goal_association_{distance:.2f}m"
+                request = make_request(label)
+                request.vehicle_hint.x = 0.2 + math.cos(.3) * (3.25 + distance)
+                request.vehicle_hint.y = 0.1 + math.sin(.3) * (3.25 + distance)
+                _, _, output = exercise(label, "contour_target_unassociated", False, request=request)
+                require(output.approach_contour_status == approach_status,
+                        f"{label}: unexpected approach status {output.approach_contour_status}")
             exercise("missing_exact_time_transform_rejects_latest_fallback", "tf_unavailable", False,
                      scan_kind="extrapolated_tf")
             exercise("exact_scan_time_transform_not_latest", scan_kind="exact_tf")

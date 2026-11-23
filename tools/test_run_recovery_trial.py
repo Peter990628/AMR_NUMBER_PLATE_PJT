@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from recovery_selection import CandidateSelector
 from recovery_trial_math import PoseController
-from run_recovery_trial import observe_buffered_preview, require_live_plate, requires_contour_hold
+from run_recovery_trial import contour_hold_reason, observe_buffered_preview, require_live_plate
 from test_recovery_selection import snapshot
 
 
@@ -46,7 +46,7 @@ class FinalAlignmentTests(unittest.TestCase):
         controller = PoseController((0., 0., 0.5))
         miss = SimpleNamespace(valid=False, status='contour_target_unassociated')
         def hold(leg, pose):
-            return requires_contour_hold('create3', leg, miss, controller, pose)
+            return contour_hold_reason('create3', leg, miss, controller, pose)
 
         self.assertTrue(hold('ocr_candidate', (-0.021, 0., 0.)))
         for x in (-0.020, -0.021):
@@ -69,7 +69,28 @@ class FinalAlignmentTests(unittest.TestCase):
                        'tf_unavailable'):
             preview = SimpleNamespace(valid=False, status=status)
             with self.subTest(status=status):
-                self.assertTrue(requires_contour_hold('create3', 'ocr_candidate', preview, controller, pose))
+                self.assertEqual(contour_hold_reason('create3', 'ocr_candidate', preview, controller, pose), status)
+
+    def test_extended_association_is_only_used_on_fixed_recovery_legs(self):
+        controller = PoseController((0., 0., 0.5))
+        pose = (-.056, 0., 0.)
+        preview = SimpleNamespace(valid=False, status='contour_target_unassociated',
+                                  approach_contour_status='ok')
+        for leg in ('corner_probe', 'ocr_candidate'):
+            self.assertIsNone(contour_hold_reason('create3', leg, preview, controller, pose))
+        self.assertEqual(contour_hold_reason('create3', 'setup', preview, controller, pose),
+                         'contour_target_unassociated')
+        for status in ('stale_scan', 'tf_unavailable', 'contour_ambiguous_target',
+                       'contour_no_supported_segment'):
+            preview.status = status
+            self.assertEqual(contour_hold_reason('create3', 'ocr_candidate', preview, controller, pose), status)
+
+    def test_competing_cluster_in_outer_ring_holds_even_with_valid_strict_preview(self):
+        controller = PoseController((0., 0., 0.5))
+        preview = SimpleNamespace(valid=True, status='preview_only', approach_contour_status='ambiguous_target')
+        for pose in ((-.056, 0., 0.), (0., 0., 0.)):
+            self.assertEqual(contour_hold_reason('create3', 'ocr_candidate', preview, controller, pose),
+                             'contour_ambiguous_target')
 
 
 class LivePlateTests(unittest.TestCase):

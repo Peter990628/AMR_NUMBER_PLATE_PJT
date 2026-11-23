@@ -57,6 +57,7 @@ public:
     tf_wait_ = parameter("tf_wait_sec", .3);
     request_timeout_ = parameter("request_timeout_sec", 300.);
     association_radius_ = parameter("target_association_radius_m", 2.);
+    const double approach_margin = parameter("approach_association_margin_m", .10);
     range_min_ = parameter("range_min_m", .1);
     range_max_ = parameter("range_max_m", 6.);
     config_.forward_step_m = parameter("forward_step_m", .35);
@@ -78,6 +79,7 @@ public:
       !positive(scan_timeout_, 60) || !positive(max_scan_age_, 60) ||
       !positive(tf_wait_, 2) || !positive(request_timeout_, 3600) ||
       !positive(association_radius_, 20) || !positive(range_min_, 100) ||
+      approach_margin < 0 || !positive(association_radius_ + approach_margin, 20) ||
       !positive(range_max_, 100) || range_min_ >= range_max_ ||
       !std::isfinite(future_tolerance_) || future_tolerance_ < 0 || future_tolerance_ > 1 ||
       !positive(config_.forward_step_m, 5) || !positive(config_.lateral_step_m, 5) ||
@@ -96,6 +98,8 @@ public:
     contour_config_.min_cluster_points = static_cast<size_t>(cluster_points);
     contour_config_.min_segment_points = static_cast<size_t>(segment_points);
     contour_config_.max_aims = static_cast<size_t>(max_aims);
+    approach_contour_config_ = contour_config_;
+    approach_contour_config_.association_radius_m += approach_margin;
     rcl_interfaces::msg::ParameterDescriptor marker_descriptor;
     marker_descriptor.description =
       "Zero-based aim whose six candidate poses are displayed; display only, not goal selection";
@@ -330,7 +334,8 @@ private:
     out.plate_status = plate_status(); return out;
   }
 
-  void invalidate(const std::string & reason, size_t contour_clusters = 0)
+  void invalidate(const std::string & reason, size_t contour_clusters = 0,
+    const std::string & approach_status = {})
   {
     const auto out_base = base_output();
     if (!last_valid_ && last_status_ == reason && last_header_ == out_base.header &&
@@ -338,6 +343,7 @@ private:
     auto out = out_base; out.status = reason;
     if (reason.rfind("contour_", 0) == 0) {
       out.contour_status = reason.substr(8);
+      out.approach_contour_status = approach_status;
       out.contour_cluster_count = static_cast<uint32_t>(contour_clusters);
     }
     output_->publish(out);
@@ -400,15 +406,22 @@ private:
     CameraPlanarExtrinsic camera{{base_camera.getOrigin().x(), base_camera.getOrigin().y()},
       std::atan2(forward.y(), forward.x())};
     RecoveryContourResult contour;
+    std::string approach_status;
     const Vec2 hint{request_->vehicle_hint.x, request_->vehicle_hint.y};
+    const ScanGeometry geometry{
+      scan->angle_min, scan->angle_increment, scan->range_min, scan->range_max};
     try {
-      contour = extract_recovery_contour(scan_points,
-        {scan->angle_min, scan->angle_increment, scan->range_min, scan->range_max},
-        scan->ranges.size(), hint, contour_config_);
+      contour = extract_recovery_contour(
+        scan_points, geometry, scan->ranges.size(), hint, contour_config_);
+      approach_status = contour.status;
+      // Widening can admit an out-of-radius cluster or introduce a competitor.
+      if ((contour.status == "target_unassociated" || contour.cluster_count > 1) &&
+        approach_contour_config_.association_radius_m != contour_config_.association_radius_m)
+      {
+        approach_status = extract_recovery_contour(
+          scan_points, geometry, scan->ranges.size(), hint, approach_contour_config_).status;
+      }
     } catch (const std::invalid_argument &) {invalidate("invalid_geometry"); return;}
-    if (contour.status != "ok") {
-      invalidate("contour_" + contour.status, contour.cluster_count); return;
-    }
     const double camera_height = fixed_base.getOrigin().z() + base_camera.getOrigin().z();
     const auto camera_fixed = fixed_base * base_camera.getOrigin();
     const auto current_camera = point(camera_fixed.x(), camera_fixed.y(), camera_fixed.z());
@@ -416,9 +429,13 @@ private:
     if (!std::isfinite(camera_height) || !finite(current_camera)) {
       invalidate("invalid_geometry"); return;
     }
+    if (contour.status != "ok") {
+      invalidate("contour_" + contour.status, contour.cluster_count, approach_status); return;
+    }
     auto out = base_output(); out.header.stamp = scan->header.stamp;
     out.valid = true; out.status = "preview_only";
     out.contour_status = contour.status;
+    out.approach_contour_status = approach_status;
     out.contour_cluster_count = static_cast<uint32_t>(contour.cluster_count);
     out.current_pose = pose(current, fixed_base.getOrigin().z());
     for (const auto & p : contour.contour) {
@@ -557,6 +574,7 @@ private:
 
   RecoveryPreviewConfig config_;
   RecoveryContourConfig contour_config_;
+  RecoveryContourConfig approach_contour_config_;
   std::string fixed_frame_, base_frame_, camera_frame_, request_error_{"no_request"};
   double scan_timeout_, max_scan_age_, future_tolerance_, tf_wait_, request_timeout_;
   double association_radius_, range_min_, range_max_;

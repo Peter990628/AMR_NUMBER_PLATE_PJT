@@ -23,6 +23,7 @@
 /ros2_ws/build/
 /ros2_ws/install/
 /ros2_ws/log/
+/symlink_install_manifest.txt
 *.log
 
 # Python caches and virtual environments.
@@ -45,3 +46,4 @@ venv/
 /WORK_LOG_2026-11-19.md
 /WORK_LOG_2026-11-20.md
 /WORK_LOG_2026-11-21.md
+/WORK_LOG_2026-11-23.md

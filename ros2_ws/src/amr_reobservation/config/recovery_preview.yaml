@@ -17,6 +17,7 @@ recovery_preview:
     # NOT a calibrated footprint, free-space certificate, or swept-path check.
     clearance_radius_m: 0.75
     target_association_radius_m: 2.0
+    approach_association_margin_m: 0.10
     # Ordered observed contour, associated with the approximate vehicle hint.
     contour_cluster_gap_m: 0.18
     contour_max_missing_beams: 2

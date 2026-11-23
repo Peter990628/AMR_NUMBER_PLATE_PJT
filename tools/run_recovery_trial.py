@@ -52,12 +52,18 @@ def observe_buffered_preview(selector, preview, receipt_wall_sec, now_ros_sec):
                             now_wall_sec=receipt_wall_sec)
 
 
-def requires_contour_hold(robot, leg, preview, controller, pose):
-    if robot != 'create3' or preview.valid:
-        return False
-    # At the fixed OCR position the remaining command only aligns yaw.
-    return not (leg == 'ocr_candidate' and preview.status == 'contour_target_unassociated'
-                and controller.at_goal_position(pose))
+def contour_hold_reason(robot, leg, preview, controller, pose):
+    if robot != 'create3':
+        return None
+    reason = None if preview.valid else preview.status
+    if leg in ('corner_probe', 'ocr_candidate') and (preview.valid or reason == 'contour_target_unassociated'):
+        approach = getattr(preview, 'approach_contour_status', '')
+        if approach:
+            reason = None if approach == 'ok' else 'contour_' + approach
+    if (leg == 'ocr_candidate' and reason == 'contour_target_unassociated'
+            and controller.at_goal_position(pose)):
+        return None
+    return reason
 
 
 def require_live_plate(latest, now_ns, event, *, hold=None):
@@ -450,11 +456,12 @@ def run(args):
             contour_lost_at=None
             while True:
                 health(); pose=current()
-                if requires_contour_hold(args.robot, label, latest['preview'][1], controller, pose):
+                hold_reason = contour_hold_reason(args.robot, label, latest['preview'][1], controller, pose)
+                if hold_reason:
                     command()
                     if contour_lost_at is None:
                         contour_lost_at=time.monotonic()
-                        event('motion_hold',reason=latest['preview'][1].status)
+                        event('motion_hold',reason=hold_reason)
                     if time.monotonic()-contour_lost_at > 1.5 or time.monotonic()>deadline:
                         raise RuntimeError('target_contour_lost_during_motion')
                     spin(.04)
