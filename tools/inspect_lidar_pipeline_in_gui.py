@@ -27,7 +27,8 @@ import numpy as np
 
 PROJECT = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = PROJECT / 'local_artifacts/lidar_input_diagnosis_2026-11-20'
-SENSOR = '/iw_hub_ROS/chassis/ObservationLidar/observation_lidar'
+RECOVERY_DIR = globals().get('RECOVERY_CAPTURE_DIR')
+SENSOR = globals().get('RECOVERY_SENSOR', '/iw_hub_ROS/chassis/ObservationLidar/observation_lidar')
 FRAME = 'observation_lidar'
 TOPIC = '/observation_lidar/scan'
 LOCK = '_peter_lidar_pipeline_inspection_task'
@@ -35,10 +36,10 @@ DURATION = 30.0
 MAX_ARRAY = 16384
 MAX_BYTES = 100 * 1024 * 1024
 CAPTURE_GPU_PAYLOADS = bool(globals().get('CAPTURE_GPU_PAYLOADS', False))
-CAPTURE_DROPOUT_WINDOW = bool(globals().get('CAPTURE_DROPOUT_WINDOW', False))
+CAPTURE_DROPOUT_WINDOW = RECOVERY_DIR is not None or bool(globals().get('CAPTURE_DROPOUT_WINDOW', False))
 if CAPTURE_DROPOUT_WINDOW:
     CAPTURE_GPU_PAYLOADS = True
-    DURATION = 125.0
+    DURATION = 600.0 if RECOVERY_DIR else 125.0
 
 
 def serializable(value):
@@ -65,10 +66,12 @@ def serializable(value):
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(serializable(value), ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(serializable(value), ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    tmp.replace(path)
 
 
-async def inspect_pipeline():
+async def inspect_pipeline(run_active=None):
     import carb.settings
     import omni.graph.core as og
     import omni.kit.app
@@ -86,8 +89,9 @@ async def inspect_pipeline():
     if not sensor:
         raise RuntimeError('Expected observation LiDAR not found: ' + SENSOR)
     prefix = 'gui_dropout_' if CAPTURE_DROPOUT_WINDOW else 'gui_pipeline_'
-    output = OUTPUT_ROOT / (prefix + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ'))
-    output.mkdir(parents=True, exist_ok=False)
+    output = RECOVERY_DIR or OUTPUT_ROOT / (prefix + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ'))
+    if not RECOVERY_DIR:
+        output.mkdir(parents=True, exist_ok=False)
     report = {'status': 'preparing', 'output': str(output), 'scene_changes': False,
               'motion_commands': False, 'annotators_attached': False,
               'pointer_payloads_captured': False, 'gpu_payload_mode': CAPTURE_GPU_PAYLOADS,
@@ -162,6 +166,13 @@ async def inspect_pipeline():
                         pending.append(parent)
         inventory = []
         dynamic = []
+        recovery_fields = {
+            'IsaacComputeRTXLidarFlatScan': ['outputs:numCols', 'outputs:depthRange', 'outputs:azimuthRange',
+                                             'outputs:horizontalResolution', 'outputs:linearDepthData'],
+            'ROS2PublishLaserScan': ['inputs:numCols', 'inputs:timeStamp', 'inputs:linearDepthData'],
+            'IsaacCreateRTXLidarScanBuffer': ['outputs:width'],
+            'ReadRpFabricTime': ['outputs:fabricFrameTimeNumerator', 'outputs:fabricFrameTimeDenominator'],
+        }
         for path, node in selected.items():
             attrs = list(node.get_attributes())
             inventory.append({'path': path, 'type': node.get_type_name(),
@@ -177,7 +188,11 @@ async def inspect_pipeline():
                         'lineardepthdata', 'timestamp', 'renderproduct', 'cuda', 'ptr',
                         'buffersize', 'rotationrate', 'numcols', 'numrows')):
                     watched.append(attr)
-            dynamic.append((path, node.get_type_name(), watched))
+            if RECOVERY_DIR:
+                names = recovery_fields.get(node.get_type_name().split('.')[-1], [])
+                watched = [node.get_attribute(name) for name in names]
+            if watched:
+                dynamic.append((path, node.get_type_name(), watched))
         write_json(output / 'pipeline.json', {'nodes': inventory, 'connections': connections})
         payload_specs = []
         if CAPTURE_GPU_PAYLOADS:
@@ -195,9 +210,10 @@ async def inspect_pipeline():
             if CAPTURE_DROPOUT_WINDOW:
                 helper = Path(__file__).with_name('lidar_dropout_recorder.py')
                 recorder_class = runpy.run_path(str(helper))['DropoutRecorder']
-                recorder = recorder_class(output)
+                wait = DURATION if RECOVERY_DIR else 120.
+                recorder = recorder_class(output, wait_seconds=wait, count_drop=bool(RECOVERY_DIR))
                 (output / 'recorder_source.py').write_bytes(helper.read_bytes())
-                report.update(trigger_wait_limit_sec=120., pre_event_sec=3., post_event_sec=5.,
+                report.update(trigger_wait_limit_sec=wait, pre_event_sec=3., post_event_sec=5.,
                               ring_limit_bytes=16 * 1024 * 1024,
                               recorder_sha256=hashlib.sha256(helper.read_bytes()).hexdigest())
             else:
@@ -249,8 +265,15 @@ async def inspect_pipeline():
             await asyncio.wait_for(app.post_update_async(), timeout=5.0)
             if context.get_stage() != stage or not timeline.is_playing():
                 raise RuntimeError('Stage or Play state changed; recording stopped.')
-            values = [{'path': path, 'type': typ, 'values': {a.get_name(): read(a) for a in attrs}}
-                      for path, typ, attrs in dynamic]
+            values = []
+            for path, typ, attrs in dynamic:
+                data = {}
+                for attr in attrs:
+                    name = attr.get_name()
+                    if RECOVERY_DIR and name.endswith(':linearDepthData') and data.get(name.split(':')[0] + ':numCols') == 0:
+                        continue  # Intermediate render frames retain the previous full-scan array.
+                    data[name] = read(attr)
+                values.append({'path': path, 'type': typ, 'values': data})
             signature = hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
             event = {'wall_sec': time.monotonic()-capture_start, 'wall_time_ns': time.time_ns(),
                      'timeline_seconds': timeline.get_current_time(),
@@ -259,11 +282,16 @@ async def inspect_pipeline():
                      'nodes': values}
             if CAPTURE_GPU_PAYLOADS:
                 event['gpu_payloads'], blobs = copy_payloads()
-            done = recorder.observe(event, blobs) if recorder is not None else False
+            ros_trigger = None
+            if RECOVERY_DIR and recorder.trigger is None and (output / 'ros_trigger.json').is_file():
+                ros_trigger = json.loads((output / 'ros_trigger.json').read_text())
+            done = recorder.observe(event, blobs, ros_trigger) if recorder is not None else False
             if stream is not None:
                 stream.write(json.dumps(event, allow_nan=False) + '\n')
             previous_signature = signature
             report['sample_count'] += 1
+            if RECOVERY_DIR and report['sample_count'] == 1:
+                (output / 'sampling').touch()
             if recorder is not None and (event['wall_sec'] >= next_heartbeat or done):
                 report.update(recorder.summary())
                 write_json(output / 'report.json', report)
@@ -271,13 +299,16 @@ async def inspect_pipeline():
             if done:
                 report['status'] = recorder.finished_reason
                 break
+            if run_active is not None and recorder.trigger is None and not run_active():
+                report['status'] = 'run_ended_without_trigger'
+                break
             total_bytes = ((recorder.frames.tell() + recorder.payload_file.tell()) if recorder is not None
                            else stream.tell() + (payload_stream.tell() if payload_stream is not None else 0))
-            if total_bytes >= MAX_BYTES or report['sample_count'] >= (10000 if recorder is not None else 2000):
+            if total_bytes >= MAX_BYTES or (not RECOVERY_DIR and report['sample_count'] >= (10000 if recorder is not None else 2000)):
                 report['status'] = 'bounded_limit'
                 break
         else:
-            report['status'] = 'complete'
+            report['status'] = 'duration_limit' if RECOVERY_DIR else 'complete'
         report['capture_wall_sec'] = time.monotonic()-capture_start
     except BaseException as exc:
         report.update(status='error', error=type(exc).__name__ + ': ' + str(exc))

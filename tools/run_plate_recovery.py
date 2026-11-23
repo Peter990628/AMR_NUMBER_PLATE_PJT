@@ -17,6 +17,7 @@ import time
 
 from probe_plate_ocr import sha256
 from recovery_ocr_session import ROOT, stop_process
+from recovery_lidar_capture import RunLidarCapture
 from recovery_trial_math import CORNER_PROBE_OVERRUNS_M, MOTION_SPEEDS, SIMULATION_ROBOTS
 
 
@@ -57,6 +58,8 @@ def main():
                         help='New run directory (default: dated folder in local_artifacts/recovery_runs)')
     parser.add_argument('--record-sensors', action='store_true',
                         help='Record LiDAR, odometry, clock and TF to sensors/ during the trial')
+    parser.add_argument('--no-lidar-internals', action='store_true',
+                        help='Keep the ROS bag but skip the in-process Isaac LiDAR diagnostic')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--robot', choices=SIMULATION_ROBOTS, default='iw_hub')
     parser.add_argument('--speed', choices=MOTION_SPEEDS,
@@ -73,6 +76,7 @@ def main():
     parser.add_argument('--model-path', type=Path, default=ROOT/'assets/models/plate_kr_rtmdet_v4.onnx')
     parser.add_argument('--config', type=Path, help='JSON overriding local model/interpreter paths')
     args = parser.parse_args()
+    record_internal = args.record_sensors and not args.no_lidar_internals
     robot = SIMULATION_ROBOTS[args.robot]
     args.speed = args.speed or robot.default_speed
     if args.speed == 'create3_fast' and args.robot != 'create3':
@@ -92,7 +96,8 @@ def main():
         print(json.dumps({'status':'configuration_checked', 'motion_enabled':False,
                           'context':'explicit_mock' if args.mock_params else 'upstream_request',
                           'mock_params':str(args.mock_params) if args.mock_params else None,
-                          'record_sensors':args.record_sensors, 'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once,
+                          'record_sensors':args.record_sensors, 'record_lidar_internals': record_internal,
+                          'corner_probe_once':args.corner_probe_once is not None, 'corner_probe_overrun_m':args.corner_probe_once,
                           'corner_probe_plus_30cm':args.corner_probe_plus_30cm,
                           'robot':args.robot, 'scan_topics':robot.scan_topics,
                           'speed':args.speed, 'motion_limits':MOTION_SPEEDS[args.speed]._asdict(),
@@ -109,6 +114,7 @@ def main():
     os.environ.setdefault('ROS_LOG_DIR', str(output/'ros_logs'))
     (output/'config.json').write_text(json.dumps(config, indent=2)+'\n')
     owned = []; logs = []
+    lidar_capture = None
     final_report = {}
     result = {'status':'aborted', 'success':False, 'text':None, 'candidate_attempts':0,
               'robot':args.robot, 'scan_topics':robot.scan_topics,
@@ -147,6 +153,12 @@ def main():
             spawn(['ros2', 'bag', 'record', '-o', output/'sensors',
                    *robot.scan_topics,
                    '/chassis/odom', '/clock', '/tf', '/tf_static', '/reobservation/scene_tf'], 'sensor_recorder')
+            if record_internal:
+                try:
+                    lidar_capture = RunLidarCapture(output, args.robot)
+                except OSError as error:
+                    result['lidar_internal'] = {'status': 'error', 'error': str(error)}
+                    print(f'LiDAR 내부 수집 요청 실패: {error}', file=sys.stderr, flush=True)
         spawn([config['ocr_python'], ROOT/'tools/plate_crop_ocr_node.py', '--baseline',
                config['ocr_baseline'], '--cache', output/'ocr_cache'], 'plate_ocr')
         spawn(['ros2', 'run', 'amr_reobservation', 'plate_window_decision_node'], 'ocr_decision')
@@ -154,9 +166,18 @@ def main():
                'model_path:='+str(args.model_path.resolve())], 'detector')
         spawn(['ros2', 'launch', 'amr_reobservation', 'recovery_preview.launch.py', 'rviz:=false',
                'params_file:='+str(output/'preview.yaml'), *mock_args], 'preview')
+        if lidar_capture:
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and not (lidar_capture.directory/'sampling').exists():
+                time.sleep(.1)
+            if not (lidar_capture.directory/'sampling').exists():
+                print('LiDAR 내부 수집 시작이 아직 확인되지 않았습니다. Isaac Sim Script Editor에서 '
+                      'watch_recovery_lidar_in_gui.py를 한 번 실행하세요. ROS bag 기록은 진행합니다.',
+                      file=sys.stderr, flush=True)
         runner = spawn([config['ros_python'], ROOT/'tools/run_recovery_trial.py',
                         '--single-ocr-config', output/'config.json', '--execute', '--speed', args.speed,
                         '--robot', args.robot,
+                        *(['--lidar-diagnostic-dir', lidar_capture.directory] if lidar_capture else []),
                         *(['--corner-probe-once', str(args.corner_probe_once)] if args.corner_probe_once else []),
                         *(['--corner-probe-plus-30cm'] if args.corner_probe_plus_30cm else []),
                         '--output', output/'controller'], 'controller')
@@ -187,6 +208,11 @@ def main():
     finally:
         cleanup = {}
         for name, process in reversed(owned):
+            if name == 'sensor_recorder' and lidar_capture:
+                try:
+                    result['lidar_internal'] = lidar_capture.finish()
+                except OSError as error:
+                    result['lidar_internal'] = {'status': 'error', 'error': str(error)}
             try:
                 stop_process(process)
                 cleanup[name] = process.poll()

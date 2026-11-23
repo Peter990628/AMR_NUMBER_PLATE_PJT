@@ -39,3 +39,16 @@ AMR의 시작 위치나 방향을 바꿔도 좌표를 입력할 필요가 없다
 3단계 빌드에는 프로젝트 로컬 ONNX Runtime C++ 배포판이 필요하다. `bash tools/setup_onnxruntime.sh`로 준비한다. 모델은 기존 `ALLEY_PARK_PATROL_PJT`의 사용자 보유 가중치를 재사용하며, 원본/ONNX 모델과 다운로드한 런타임은 Git에 포함하지 않는다. 준비 및 검증 방법은 3단계 문서를 참고한다.
 
 차량 원본 및 변환 에셋은 저장소에 포함하지 않는다. 장면이 참조하는 `sedan_car.usd`는 로컬에 별도로 준비해야 한다. C++ 노드 자체는 `/observation_lidar/scan`을 제공하는 다른 장면이나 기록 데이터로도 실행할 수 있다.
+
+## 통합 주행 중 LiDAR 누락 기록
+
+Isaac Sim을 열 때마다 **Window → Script Editor**에서 아래 두 줄을 한 번 실행한다. 같은 앱에서 Stop → Play 하거나 실험을 반복할 때는 그대로 둔다.
+
+```python
+import runpy
+runpy.run_path('/home/peter-msi/peter_pjt/tools/watch_recovery_lidar_in_gui.py')
+```
+
+Play 상태에서 평소처럼 `run_recovery_test.sh --execute`를 실행한다. ROS 스캔 또는 Isaac 내부의 완성 스캔에서 유효 점 수가 220개 미만이고 직전 최대 10개 스캔의 중앙값보다 25% 이상이자 30점 이상 적은 상태가 3회 이어지면 첫 감소 시각을 기록한다. 이 기준은 이번 배치의 약 400점에서 수십 점으로 줄던 구간을 찾기 위한 진단값이다. 시뮬레이션 시간이 0.5초 진행되는 동안 내부 완성 스캔 자체가 끊겨도 기록한다.
+
+실험 폴더의 `lidar_internal/`에 감지 전 최대 3초와 감지 후 5초(실제 시간)의 GPU 원본·누적 배열을 저장한다. `frames.jsonl`의 GPU 오프셋으로 `gpu_payloads.bin`을 읽고, `scan_summary.jsonl`의 발행 시각과 `sensors/` bag의 LaserScan 헤더 시각을 맞춰 비교한다. `result.json`의 `lidar_internal.status`에서 `event_window_complete`는 전후 기록 완료, `run_ended_without_trigger`는 감지 없이 종료, `reader_unavailable`은 GUI 기록기 연결 실패를 뜻한다. GPU 복사 부하를 비교할 때는 `--no-lidar-internals`를 붙여 ROS bag만 기록할 수 있다.

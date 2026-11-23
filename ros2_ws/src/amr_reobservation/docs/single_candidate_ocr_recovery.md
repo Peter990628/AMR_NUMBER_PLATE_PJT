@@ -132,7 +132,8 @@ AMR의 시작 위치나 방향을 바꾸면 실행기가 차량의 `world` 위�
 | 이동 전후 카메라 사진과 OCR 판정 | `controller/before_capture/`, `controller/after_capture/`, `controller/before_ocr/report.json`, `controller/after_ocr/report.json` |
 | 선택한 목표·조준점, 이동 중 자세와 명령 | `controller/selection.json`, `controller/events.jsonl` |
 | CFV 방향 추정에 쓴 사진과 예측값 | `controller/cfv_capture/`, `controller/cfv_inference/predictions.csv` |
-| 선택한 로봇의 LiDAR 원본, odom, 시계, TF | `sensors/` (ROS 2 bag). `result.json`의 `sensor_bag_finalized`로 기록 마무리를 확인한다. |
+| ROS에서 수신한 LaserScan, odom, 시계, TF | `sensors/` (ROS 2 bag). `result.json`의 `sensor_bag_finalized`로 기록 마무리를 확인한다. |
+| 관측 LiDAR 점 감소 전후의 Isaac 원본·누적 버퍼와 발행 직전 배열 | `lidar_internal/`. 실행 전에 [Isaac Sim 내부 기록기](../../../../README.md#통합-주행-중-lidar-누락-기록)를 연결한다. `result.json`의 `lidar_internal`에서 상태와 감지 시각을 확인한다. |
 
 도달한 단계의 파일만 생성된다. 예를 들어 출발 위치에서 이미 읽혔다면 이동 후 사진은 없다.
 

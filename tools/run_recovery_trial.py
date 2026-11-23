@@ -27,6 +27,7 @@ from recovery_trial_metrics import ObservationWindow, match_measurement_image
 from cfv_trial_selection import load_context, choose_cfv_snapshot
 from cfv_view_trial import choose_view_snapshot, validate_view_leases, LIMITS as VIEW_LIMITS
 from cfv_view_trial import CLOSE_LIMITS, CREATE3_CORNER_PROBE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS
+from lidar_dropout_recorder import ScanCountDrop
 
 
 def stamp_ns(header):
@@ -176,10 +177,23 @@ def run(args):
         baseline_clock_rate=[None]
         previous_odom_pose=None
         measured_speeds=(math.inf, math.inf)
+        lidar_drop = ScanCountDrop() if args.lidar_diagnostic_dir else None
         def receive(kind,msg):
-            nonlocal previous_odom_pose, measured_speeds
+            nonlocal previous_odom_pose, measured_speeds, lidar_drop
             now=time.monotonic(); latest[kind]=(now,msg)
-            if kind=='preview':
+            if kind == OBSERVATION_SCAN and lidar_drop is not None:
+                hits = sum(msg.range_min <= d <= msg.range_max for d in msg.ranges)
+                drop = lidar_drop.observe(stamp_ns(msg.header), hits)
+                if drop:
+                    event('lidar_point_count_drop', **drop)
+                    tmp = args.lidar_diagnostic_dir / 'ros_trigger.tmp'
+                    try:
+                        tmp.write_text(json.dumps(drop))
+                        tmp.replace(tmp.with_suffix('.json'))
+                    except OSError as exc:
+                        event('lidar_diagnostic_write_error', error=str(exc))
+                    lidar_drop = None
+            elif kind=='preview':
                 d=message_to_ordereddict(msg); previews.append((now,d))
                 event('preview',message=d)
             elif kind=='plate':
@@ -898,6 +912,8 @@ def run(args):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--lidar-diagnostic-dir', type=Path,
+                        help='Notify the internal LiDAR reader of a drop in received scan points')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--execute',action='store_true')
     parser.add_argument('--robot',choices=SIMULATION_ROBOTS,default='iw_hub')
