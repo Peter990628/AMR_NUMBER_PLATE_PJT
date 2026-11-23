@@ -24,6 +24,8 @@ iw.hub와 비교할 때는
 차량 힌트는 장면 속 차량의 `world` 위치에서 읽어 이번 실행의 `odom`으로 환산한다.
 AMR의 시작 위치나 방향을 바꿔도 좌표를 입력할 필요가 없다. [통합 실험 안내](ros2_ws/src/amr_reobservation/docs/single_candidate_ocr_recovery.md)
 
+차량 힌트에서 재는 2.00m, 주행 중 허용하는 2.10m, 경로 간격 1.20m를 실제 주행 그림과 함께 보려면 [Create 3의 목표 선택·주행·정지·OCR 설명서](ros2_ws/src/amr_reobservation/docs/create3_motion_guide.md)를 참고한다.
+
 - 환경: Ubuntu 22.04, ROS 2 Humble, Isaac Sim 5.1, C++17.
 - [`ros2_ws/src/amr_reobservation`](ros2_ws/src/amr_reobservation/README.md): C++ 코드, 빌드·실행 방법, 테스트, 파라미터 설명.
 - [2단계 실행·알고리즘 설명](ros2_ws/src/amr_reobservation/docs/stage2_vehicle_side.md): 측면 후보, 방향·길이·잔차, ROS 메시지와 RViz 표시.
