@@ -1,0 +1,345 @@
+{
+  "date": "2026-11-24",
+  "implementation_commit": "3d9a498",
+  "scene": "amr_create3_camera_fail.usd",
+  "robot": "create3",
+  "command": "./run_recovery_test.sh --execute --corner-probe-once 1.50",
+  "speed_profile": "create3_fast",
+  "expected_plate": "123가4567",
+  "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+  "cases": [
+    {
+      "case": "side",
+      "world_xy_m": [
+        3.1901485841422237,
+        2.9855559883341645
+      ],
+      "world_yaw_deg": -45.999999986051954,
+      "status": "succeeded_after_motion",
+      "success": true,
+      "text": "123가4567",
+      "error": null,
+      "elapsed_wall_sec": 154.15713308199975,
+      "candidate_attempts": 2,
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_corner",
+        "prepare_corner_direction",
+        "select_corner_end_face",
+        "moving_to_end_face",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "motion_starts": [
+        {
+          "target": "corner_probe",
+          "goal_odom_xy_yaw": [
+            -1.856863857935585,
+            -1.9590992700402852,
+            -0.18173863371556617
+          ]
+        },
+        {
+          "target": "ocr_candidate",
+          "goal_odom_xy_yaw": [
+            -0.970602910048225,
+            -3.694907836766033,
+            0.21230723162454387
+          ]
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "corner_probe",
+          "reached_odom_xy_yaw": [
+            -1.8409973559751918,
+            -1.9476703863571376,
+            -0.20260348575263437
+          ],
+          "min_clearance_m": 1.9294479217306124
+        },
+        {
+          "target": "ocr_candidate",
+          "reached_odom_xy_yaw": [
+            -0.9767609664231726,
+            -3.6775831018308707,
+            0.1920557632090408
+          ],
+          "min_clearance_m": 1.981490658333725
+        }
+      ],
+      "observations": {
+        "before": {
+          "status": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "samples_considered": 8,
+          "support": []
+        },
+        "corner": {
+          "status": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "samples_considered": 8,
+          "support": []
+        },
+        "after": {
+          "status": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "samples_considered": 3,
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 102050005322,
+              "text": "123가4567",
+              "box_confidence": 0.6348342299461365,
+              "ocr_confidence": 0.9974936246871948
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 102250005332,
+              "text": "123가4567",
+              "box_confidence": 0.643419623374939,
+              "ocr_confidence": 0.9974026083946228
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 102450005343,
+              "text": "123가4567",
+              "box_confidence": 0.6122819185256958,
+              "ocr_confidence": 0.9975401163101196
+            }
+          ]
+        }
+      },
+      "last_rejected_view": null,
+      "unconfirmed_probe": null,
+      "bag_finalized": true,
+      "lidar_internal_status": "run_ended_without_trigger",
+      "video_start_sec": 0.0,
+      "video_end_sec": 42.917
+    },
+    {
+      "case": "rear_left",
+      "world_xy_m": [
+        0.725,
+        2.831
+      ],
+      "world_yaw_deg": -51.3,
+      "status": "no_candidate",
+      "success": false,
+      "text": null,
+      "error": null,
+      "elapsed_wall_sec": 46.693586228000186,
+      "candidate_attempts": 0,
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate"
+      ],
+      "motion_starts": [],
+      "arrivals": [],
+      "observations": {
+        "before": {
+          "status": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "samples_considered": 8,
+          "support": []
+        }
+      },
+      "last_rejected_view": {
+        "reason": "view_target_outside_bound",
+        "limit_m": 1.75,
+        "last_branch_distances_m": [
+          1.8309150161726626,
+          4.851456671153444
+        ]
+      },
+      "unconfirmed_probe": "corner_probe_unconfirmed",
+      "bag_finalized": true,
+      "lidar_internal_status": "run_ended_without_trigger",
+      "video_start_sec": 42.917,
+      "video_end_sec": 58.917
+    },
+    {
+      "case": "rear_right",
+      "world_xy_m": [
+        0.725,
+        -2.67
+      ],
+      "world_yaw_deg": 51.3,
+      "status": "succeeded_after_motion",
+      "success": true,
+      "text": "123가4567",
+      "error": null,
+      "elapsed_wall_sec": 79.03504465499964,
+      "candidate_attempts": 1,
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "motion_starts": [
+        {
+          "target": "ocr_candidate",
+          "goal_odom_xy_yaw": [
+            0.6931901574837352,
+            1.48688268254746,
+            -0.2710444281410288
+          ]
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "ocr_candidate",
+          "reached_odom_xy_yaw": [
+            0.687388517037957,
+            1.4687843468130877,
+            -0.2501545101768629
+          ],
+          "min_clearance_m": 1.9188665799397389
+        }
+      ],
+      "observations": {
+        "before": {
+          "status": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "samples_considered": 8,
+          "support": []
+        },
+        "after": {
+          "status": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "samples_considered": 3,
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 31150001624,
+              "text": "123가4567",
+              "box_confidence": 0.8149186372756958,
+              "ocr_confidence": 0.9985736012458801
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 31416668305,
+              "text": "123가4567",
+              "box_confidence": 0.8144452571868896,
+              "ocr_confidence": 0.998330295085907
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 31533334977,
+              "text": "123가4567",
+              "box_confidence": 0.8157473206520081,
+              "ocr_confidence": 0.9977368116378784
+            }
+          ]
+        }
+      },
+      "last_rejected_view": null,
+      "unconfirmed_probe": null,
+      "bag_finalized": true,
+      "lidar_internal_status": "run_ended_without_trigger",
+      "video_start_sec": 58.917,
+      "video_end_sec": 83.084
+    },
+    {
+      "case": "rear_near",
+      "world_xy_m": [
+        0.725,
+        2.431
+      ],
+      "world_yaw_deg": -51.3,
+      "status": "succeeded_after_motion",
+      "success": true,
+      "text": "123가4567",
+      "error": null,
+      "elapsed_wall_sec": 93.88047102000019,
+      "candidate_attempts": 1,
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "motion_starts": [
+        {
+          "target": "ocr_candidate",
+          "goal_odom_xy_yaw": [
+            0.4577292814716859,
+            -1.4341136520006095,
+            0.27977328936034046
+          ]
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "ocr_candidate",
+          "reached_odom_xy_yaw": [
+            0.4549277033948795,
+            -1.4155960723739556,
+            0.2590428811608468
+          ],
+          "min_clearance_m": 1.8950711431476965
+        }
+      ],
+      "observations": {
+        "before": {
+          "status": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "samples_considered": 8,
+          "support": []
+        },
+        "after": {
+          "status": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "samples_considered": 3,
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 35666668526,
+              "text": "123가4567",
+              "box_confidence": 0.7073923349380493,
+              "ocr_confidence": 0.9984604120254517
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 35883335204,
+              "text": "123가4567",
+              "box_confidence": 0.6988539099693298,
+              "ocr_confidence": 0.9982985258102417
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 36050001880,
+              "text": "123가4567",
+              "box_confidence": 0.7089797854423523,
+              "ocr_confidence": 0.9983005523681641
+            }
+          ]
+        }
+      },
+      "last_rejected_view": null,
+      "unconfirmed_probe": null,
+      "bag_finalized": true,
+      "lidar_internal_status": "run_ended_without_trigger",
+      "video_start_sec": 83.084,
+      "video_end_sec": 111.001
+    }
+  ],
+  "video": "create3-recovery-demo.mp4"
+}
