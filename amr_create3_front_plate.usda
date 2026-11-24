@@ -1,0 +1,53 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary cameraSettings = {
+            dictionary Front = {
+                double3 position = (5, 1.4102564102564092, 0.6820512820512824)
+                double radius = 4.9285839080810545
+            }
+            dictionary Perspective = {
+                double3 position = (-2.1675991654242126, 1.4152280602643776, 5.401496918521234)
+                double3 target = (5.9345489317742715, 0.14676484673010282, -0.39075203930083546)
+            }
+            dictionary Right = {
+                double3 position = (0, -5, 0)
+                double radius = 5
+            }
+            dictionary Top = {
+                double3 position = (4.262017749492939, 0.8190427860357811, 5)
+                double radius = 9.758153533935547
+            }
+            string boundCamera = "/OmniverseKit_Top"
+        }
+        dictionary omni_layer = {
+            string authoring_layer = "./amr_create3_front_plate.usda"
+        }
+        dictionary renderSettings = {
+            int "rtx:externalFrameCounter" = 9599
+            bool "rtx:shadows:enabled" = 0
+        }
+    }
+    endTimeCode = 1000000
+    subLayers = [@./amr_create3_camera_fail.usd@]
+    defaultPrim = "World"
+    metersPerUnit = 1
+    timeCodesPerSecond = 60
+    upAxis = "Z"
+)
+
+over "World"
+{
+    over "sedan_car"
+    {
+        # Same printed plate as the rear. Centered on the front nplate mesh
+        # at local Y=46.04 cm, 1 cm ahead of its foremost point.
+        def Xform "ExperimentFrontPlate" (
+            prepend references = @./assets/license_plate/plate_123ga4567.usda@
+        )
+        {
+            matrix4d xformOp:transform = ((100, 0, 0, 0), (0, 100, 0, 0), (0, 0, 100, 0), (0.03561, 46.03583, 269.42077, 1))
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+    }
+}

@@ -26,7 +26,7 @@ from recovery_trial_budget import assess_translation_budget
 from recovery_trial_metrics import ObservationWindow, match_measurement_image
 from cfv_trial_selection import load_context, choose_cfv_snapshot
 from cfv_view_trial import choose_view_snapshot, validate_view_leases, LIMITS as VIEW_LIMITS
-from cfv_view_trial import CLOSE_LIMITS, CREATE3_CORNER_PROBE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS
+from cfv_view_trial import CLOSE_LIMITS, CREATE3_CORNER_PROBE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS, CREATE3_INITIAL_VIEW_LIMITS
 from lidar_dropout_recorder import ScanCountDrop
 
 
@@ -138,6 +138,8 @@ def run(args):
     view_mode=args.cfv_view_c or args.cfv_fresh_close or bool(close_reference) or single_ocr
     extended_observation=repeat_view or args.cfv_fresh_close
     view_limits=CLOSE_LIMITS if close_reference or args.cfv_fresh_close or single_ocr else VIEW_LIMITS
+    if single_ocr and args.robot == 'create3':
+        view_limits = CREATE3_INITIAL_VIEW_LIMITS
     leg_limits = view_limits if view_mode else {'target_radius_m': .51, 'motion_radius_m': .55}
     if args.rotation_only:
         leg_limits = {**leg_limits, 'motion_radius_m': .03}
@@ -678,8 +680,8 @@ def run(args):
             def select_probe(beyond_corner_m, wait_sec):
                 nonlocal leg_limits
                 from corner_probe import wait_for_corner_probe
-                if args.robot == 'create3' and beyond_corner_m in CREATE3_CORNER_PROBE_LIMITS:
-                    leg_limits = CREATE3_CORNER_PROBE_LIMITS[beyond_corner_m]
+                if args.robot == 'create3':
+                    leg_limits = CREATE3_CORNER_PROBE_LIMITS.get(beyond_corner_m, CLOSE_LIMITS)
                     result['motion_limits'].update(target_radius_m=leg_limits['target_radius_m'],
                                                    radius_from_start_m=leg_limits['motion_radius_m'])
                 event('corner_probe_observe', beyond_corner_m=beyond_corner_m, wait_sec=wait_sec)

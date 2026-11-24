@@ -14,6 +14,7 @@ LIMITS = {'target_radius_m': 1.5, 'motion_radius_m': 1.6,
           'incidence_deg': 45., 'camera_range_m': 2.5}
 CLOSE_LIMITS = {**LIMITS, 'target_radius_m': 1.75, 'motion_radius_m': 1.85,
                 'per_leg_wall_sec': 220., 'session_wall_sec': 540., 'camera_range_m': 2.0}
+CREATE3_INITIAL_VIEW_LIMITS = {**CLOSE_LIMITS, 'target_radius_m': 1.90, 'motion_radius_m': 2.00}
 CREATE3_EXTENDED_LEG_LIMITS = {**CLOSE_LIMITS, 'target_radius_m': 2.30, 'motion_radius_m': 2.40}
 CREATE3_CORNER_PROBE_LIMITS = {
     1.00: CREATE3_EXTENDED_LEG_LIMITS,

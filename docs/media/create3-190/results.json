@@ -1,0 +1,1673 @@
+{
+  "date": "2026-11-24",
+  "code_base_commit": "3d9a49876d1cf5f64b607c4429d6e8939eeac684",
+  "runtime_file_sha256": {
+    "tools/run_recovery_trial.py": "5fbc7cf5e4d94de34d9818001d2ebfd3472f395a9bf695e1caa9562574ec9d67",
+    "tools/cfv_view_trial.py": "07b25c69d30a8f76020730b925bd2e966b80ba13c755c363c89c40659780979e",
+    "amr_create3_camera_fail.usd": "46e79e3a6fd4469c11555564dec4369c2b1263b8e845d665c60b43e761c191e9"
+  },
+  "first_direct_target_m": 1.9,
+  "first_direct_travel_radius_m": 2.0,
+  "corner_probe_target_m": 2.8,
+  "after_corner_target_m": 2.3,
+  "scene": "amr_create3_camera_fail.usd",
+  "command": "./run_recovery_test.sh --execute --corner-probe-once 1.50",
+  "expected_plate": "123가4567",
+  "plate_fixture": "/World/sedan_car/ExperimentRearPlate",
+  "axes": "world +X = vehicle front, +Y = vehicle left",
+  "extra_incomplete_attempt": {
+    "case": "front_left_r1",
+    "runner_exit": 143,
+    "kit_exit": 143,
+    "controller_last_error": "plate_input_stale_image",
+    "final_wrapper_result_present": false,
+    "next_action": "repeat same pose and retain this interrupted recording separately"
+  },
+  "video": "six-starts.mp4",
+  "video_speed": 4,
+  "execution_order": [
+    "rear_left_r1",
+    "front_right_r1",
+    "side_left_r1",
+    "rear_right_r1",
+    "front_left_r1",
+    "side_right_r1",
+    "rear_right_r2",
+    "front_left_r2",
+    "side_right_r2",
+    "rear_left_r2",
+    "front_right_r2",
+    "side_left_r2"
+  ],
+  "cases": [
+    {
+      "case": "side_left_r1",
+      "requested_world_xy_yaw_deg": [
+        3.1901485841422237,
+        2.9855559883341645,
+        -46.0
+      ],
+      "measured_world_xy_yaw_deg": [
+        3.19016432762146,
+        2.985530376434326,
+        -46.060574912823554
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 158.1934739850003,
+      "moves": [
+        {
+          "target": "corner_probe",
+          "goal_odom": [
+            -1.8672508578859837,
+            -1.989945241733264,
+            -0.17908140832766095
+          ],
+          "distance_m": 2.728713254811346,
+          "initial_path_clearance_m": 2.0638379235904187
+        },
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            -1.221033209633938,
+            -3.469905421105009,
+            0.22372875830884892
+          ],
+          "distance_m": 1.6194131870748882,
+          "initial_path_clearance_m": 2.1869801165543015
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "corner_probe",
+          "reached_pose": [
+            -1.8521639903633855,
+            -1.978539266169245,
+            -0.19958542181045394
+          ],
+          "min_clearance_m": 1.959144178121636
+        },
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            -1.22522290409429,
+            -3.451761997544841,
+            0.20299122414987683
+          ],
+          "min_clearance_m": 2.1467381163703476
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_corner",
+        "prepare_corner_direction",
+        "select_corner_end_face",
+        "moving_to_end_face",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "corner": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 6,
+          "row_statuses": {
+            "recognized": 5,
+            "missing_image": 1,
+            "not_evaluated_after_success": 2
+          },
+          "support": [
+            {
+              "slot": 3,
+              "stamp_ns": 62483336592,
+              "text": "123가4567",
+              "ocr_confidence": 0.9971392154693604,
+              "box_confidence": 0.6525107622146606
+            },
+            {
+              "slot": 4,
+              "stamp_ns": 62850003277,
+              "text": "123가4567",
+              "ocr_confidence": 0.9962331056594849,
+              "box_confidence": 0.6758977770805359
+            },
+            {
+              "slot": 5,
+              "stamp_ns": 62933336615,
+              "text": "123가4567",
+              "ocr_confidence": 0.9970754384994507,
+              "box_confidence": 0.666275143623352
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            35.701759515202674,
+            35.86433501472224,
+            35.968927545378214
+          ],
+          "max_spread_deg": 0.26716803017554014
+        },
+        "corner": {
+          "axis_deg_odom_mod180": [
+            56.96544900325488,
+            57.532673539032565,
+            57.818717022004016
+          ],
+          "max_spread_deg": 0.8532680187491337
+        }
+      },
+      "incomplete_selections": [
+        {
+          "last_reason": "collecting",
+          "rejected_view": null,
+          "goal_limit_m": null,
+          "last_branch_distances_m": []
+        }
+      ],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/chassis/odom": 3858,
+        "/tf": 7716,
+        "/observation_lidar/scan": 643,
+        "/clock": 3856,
+        "/reobservation/scene_tf": 3856
+      },
+      "camera_samples": 531,
+      "camera_wall_sec": 163.51177742500022,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 5.110205105716933,
+        "target_radius_m": 2.3,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0,
+        "initial_target_radius_m": 2.8,
+        "initial_motion_radius_m": 2.9,
+        "radius_from_leg_origin_m": 2.4
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 0.0,
+      "video_end_sec": 43.917
+    },
+    {
+      "case": "side_left_r2",
+      "requested_world_xy_yaw_deg": [
+        3.1901485841422237,
+        2.9855559883341645,
+        -46.0
+      ],
+      "measured_world_xy_yaw_deg": [
+        3.190159320831299,
+        2.985534906387329,
+        -46.063147604279564
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 163.99525031700068,
+      "moves": [
+        {
+          "target": "corner_probe",
+          "goal_odom": [
+            -1.8825285713561044,
+            -2.0234901260463904,
+            -0.17903348882645517
+          ],
+          "distance_m": 2.7636517165737753,
+          "initial_path_clearance_m": 2.0642754660263614
+        },
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            -0.9878012063790715,
+            -3.7264083277678823,
+            0.24081319982863392
+          ],
+          "distance_m": 1.9264140989299918,
+          "initial_path_clearance_m": 2.10001049370039
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "corner_probe",
+          "reached_pose": [
+            -1.8664712171136755,
+            -2.012054136595036,
+            -0.19994303651355616
+          ],
+          "min_clearance_m": 1.9546070928597308
+        },
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            -0.9942049786229247,
+            -3.7088051441971377,
+            0.2199788513644403
+          ],
+          "min_clearance_m": 2.05114842437291
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_corner",
+        "prepare_corner_direction",
+        "select_corner_end_face",
+        "moving_to_end_face",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "corner": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 7,
+          "row_statuses": {
+            "recognized": 5,
+            "not_detected": 2,
+            "not_evaluated_after_success": 1
+          },
+          "support": [
+            {
+              "slot": 4,
+              "stamp_ns": 63733336657,
+              "text": "123가4567",
+              "ocr_confidence": 0.9983595013618469,
+              "box_confidence": 0.5054934620857239
+            },
+            {
+              "slot": 5,
+              "stamp_ns": 63900003332,
+              "text": "123가4567",
+              "ocr_confidence": 0.9985030889511108,
+              "box_confidence": 0.5127950310707092
+            },
+            {
+              "slot": 6,
+              "stamp_ns": 64066670008,
+              "text": "123가4567",
+              "ocr_confidence": 0.996940553188324,
+              "box_confidence": 0.5065397024154663
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            35.89421349937446,
+            35.6948833104701,
+            36.40861131587955
+          ],
+          "max_spread_deg": 0.7137280054094504
+        },
+        "corner": {
+          "axis_deg_odom_mod180": [
+            58.59195364926553,
+            58.49126194563445,
+            58.79759024682677
+          ],
+          "max_spread_deg": 0.30632830119232324
+        }
+      },
+      "incomplete_selections": [
+        {
+          "last_reason": "no_unique_confirmed_end_face",
+          "rejected_view": null,
+          "goal_limit_m": null,
+          "last_branch_distances_m": []
+        }
+      ],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/reobservation/scene_tf": 3931,
+        "/observation_lidar/scan": 655,
+        "/tf": 7862,
+        "/clock": 3931,
+        "/chassis/odom": 3931
+      },
+      "camera_samples": 556,
+      "camera_wall_sec": 169.63831046399991,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 5.144462465884169,
+        "target_radius_m": 2.3,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0,
+        "initial_target_radius_m": 2.8,
+        "initial_motion_radius_m": 2.9,
+        "radius_from_leg_origin_m": 2.4
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 43.917,
+      "video_end_sec": 89.334
+    },
+    {
+      "case": "side_right_r1",
+      "requested_world_xy_yaw_deg": [
+        3.1901485841422237,
+        -2.8199559883341645,
+        46.0
+      ],
+      "measured_world_xy_yaw_deg": [
+        3.1901779174804688,
+        -2.8199334144592285,
+        45.94225407595216
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 156.73278822199973,
+      "moves": [
+        {
+          "target": "corner_probe",
+          "goal_odom": [
+            -1.9078487907860766,
+            2.0161338453345907,
+            0.1351380933569764
+          ],
+          "distance_m": 2.7756347582472602,
+          "initial_path_clearance_m": 2.063036570230291
+        },
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            -1.0140040183362833,
+            3.3134394280057946,
+            -0.11137361557023674
+          ],
+          "distance_m": 1.5773617560278597,
+          "initial_path_clearance_m": 1.93304505572247
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "corner_probe",
+          "reached_pose": [
+            -1.8928461138348984,
+            2.0035895585326187,
+            0.1556811418418127
+          ],
+          "min_clearance_m": 1.9848983245660643
+        },
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            -1.0224930887539037,
+            3.2967765596169714,
+            -0.09043766821263821
+          ],
+          "min_clearance_m": 1.8460785034025573
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_corner",
+        "prepare_corner_direction",
+        "select_corner_end_face",
+        "moving_to_end_face",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "corner": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 3,
+          "row_statuses": {
+            "recognized": 3,
+            "not_evaluated_after_success": 5
+          },
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 62866669945,
+              "text": "123가4567",
+              "ocr_confidence": 0.9973442554473877,
+              "box_confidence": 0.8253771662712097
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 63050003288,
+              "text": "123가4567",
+              "ocr_confidence": 0.997584342956543,
+              "box_confidence": 0.8236780166625977
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 63366669971,
+              "text": "123가4567",
+              "ocr_confidence": 0.9971030354499817,
+              "box_confidence": 0.82419753074646
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            148.31652552359625,
+            146.14148560377527,
+            144.86597975276032
+          ],
+          "max_spread_deg": 3.45054577083593
+        },
+        "corner": {
+          "axis_deg_odom_mod180": [
+            127.3530422958843,
+            128.04507100501667,
+            128.61876527905827
+          ],
+          "max_spread_deg": 1.2657229831739727
+        }
+      },
+      "incomplete_selections": [
+        {
+          "last_reason": "collecting",
+          "rejected_view": null,
+          "goal_limit_m": null,
+          "last_branch_distances_m": []
+        }
+      ],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/reobservation/scene_tf": 3897,
+        "/observation_lidar/scan": 649,
+        "/tf": 7794,
+        "/clock": 3897,
+        "/chassis/odom": 3897
+      },
+      "camera_samples": 525,
+      "camera_wall_sec": 162.12985066599958,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 5.156320173901014,
+        "target_radius_m": 2.3,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0,
+        "initial_target_radius_m": 2.8,
+        "initial_motion_radius_m": 2.9,
+        "radius_from_leg_origin_m": 2.4
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 89.334,
+      "video_end_sec": 132.918
+    },
+    {
+      "case": "side_right_r2",
+      "requested_world_xy_yaw_deg": [
+        3.1901485841422237,
+        -2.8199559883341645,
+        46.0
+      ],
+      "measured_world_xy_yaw_deg": [
+        3.190178871154785,
+        -2.819931983947754,
+        45.94315025911617
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 149.22664505400007,
+      "moves": [
+        {
+          "target": "corner_probe",
+          "goal_odom": [
+            -1.8837367165788232,
+            2.015580719211785,
+            0.11941934326347564
+          ],
+          "distance_m": 2.7587124203886675,
+          "initial_path_clearance_m": 2.061007614179141
+        },
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            -1.059040713795755,
+            3.212908022041774,
+            -0.08126191685699687
+          ],
+          "distance_m": 1.4566959240789794,
+          "initial_path_clearance_m": 1.9374558746541617
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "corner_probe",
+          "reached_pose": [
+            -1.869555710530305,
+            2.0025244236331106,
+            0.14030943828769266
+          ],
+          "min_clearance_m": 1.9843204308826807
+        },
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            -1.0667292071088688,
+            3.196810258538043,
+            -0.06035653588039005
+          ],
+          "min_clearance_m": 1.8552176554860846
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_corner",
+        "prepare_corner_direction",
+        "select_corner_end_face",
+        "moving_to_end_face",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "corner": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 3,
+          "row_statuses": {
+            "recognized": 3,
+            "not_evaluated_after_success": 4,
+            "missing_image": 1
+          },
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 60666669830,
+              "text": "123가4567",
+              "ocr_confidence": 0.9959090948104858,
+              "box_confidence": 0.8011718392372131
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 60916669843,
+              "text": "123가4567",
+              "ocr_confidence": 0.9950072765350342,
+              "box_confidence": 0.8015881776809692
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 61083336519,
+              "text": "123가4567",
+              "ocr_confidence": 0.9957348108291626,
+              "box_confidence": 0.8174177408218384
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            148.4593193265934,
+            146.41303750666356,
+            144.96703162428983
+          ],
+          "max_spread_deg": 3.492287702303571
+        },
+        "corner": {
+          "axis_deg_odom_mod180": [
+            128.81374859432984,
+            130.31409595423526,
+            130.34403512895108
+          ],
+          "max_spread_deg": 1.53028653462124
+        }
+      },
+      "incomplete_selections": [
+        {
+          "last_reason": "collecting",
+          "rejected_view": null,
+          "goal_limit_m": null,
+          "last_branch_distances_m": []
+        }
+      ],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/chassis/odom": 3763,
+        "/clock": 3763,
+        "/tf": 7526,
+        "/observation_lidar/scan": 626,
+        "/reobservation/scene_tf": 3763
+      },
+      "camera_samples": 504,
+      "camera_wall_sec": 154.4711949929997,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 5.139584863563931,
+        "target_radius_m": 2.3,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0,
+        "initial_target_radius_m": 2.8,
+        "initial_motion_radius_m": 2.9,
+        "radius_from_leg_origin_m": 2.4
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 132.918,
+      "video_end_sec": 174.585
+    },
+    {
+      "case": "rear_left_r1",
+      "requested_world_xy_yaw_deg": [
+        0.725,
+        2.831,
+        -51.3
+      ],
+      "measured_world_xy_yaw_deg": [
+        0.7249631881713867,
+        2.831035614013672,
+        -51.4107946844227
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 82.72593951199997,
+      "moves": [
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            0.7605771807053947,
+            -1.6601560600518372,
+            0.26993839058463853
+          ],
+          "distance_m": 1.8261613059167834,
+          "initial_path_clearance_m": 2.0086733972334865
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            0.7561970641759741,
+            -1.6423203452958035,
+            0.24919779034509576
+          ],
+          "min_clearance_m": 1.901953691099312
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 3,
+          "row_statuses": {
+            "recognized": 3,
+            "not_evaluated_after_success": 5
+          },
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 34716668477,
+              "text": "123가4567",
+              "ocr_confidence": 0.9963680505752563,
+              "box_confidence": 0.6155999302864075
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 34933335155,
+              "text": "123가4567",
+              "ocr_confidence": 0.9965894222259521,
+              "box_confidence": 0.6275747418403625
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 35150001833,
+              "text": "123가4567",
+              "ocr_confidence": 0.9970632791519165,
+              "box_confidence": 0.6212413907051086
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            61.083419154843114,
+            60.924539522631214,
+            60.466330509053755
+          ],
+          "max_spread_deg": 0.6170886457893516
+        }
+      },
+      "incomplete_selections": [],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/reobservation/scene_tf": 2202,
+        "/observation_lidar/scan": 367,
+        "/tf": 4404,
+        "/clock": 2202,
+        "/chassis/odom": 2202
+      },
+      "camera_samples": 292,
+      "camera_wall_sec": 88.02241013100047,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.0,
+        "target_radius_m": 1.9,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 174.585,
+      "video_end_sec": 199.669
+    },
+    {
+      "case": "rear_left_r2",
+      "requested_world_xy_yaw_deg": [
+        0.725,
+        2.831,
+        -51.3
+      ],
+      "measured_world_xy_yaw_deg": [
+        0.724966824054718,
+        2.831031084060669,
+        -51.40770883713066
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 87.2829286719998,
+      "moves": [
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            0.764084502862344,
+            -1.6711687086658968,
+            0.2749275254428301
+          ],
+          "distance_m": 1.837635665397863,
+          "initial_path_clearance_m": 2.0096929141028377
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            0.7590843216072791,
+            -1.6535117479696215,
+            0.25408694395576514
+          ],
+          "min_clearance_m": 1.903129295157618
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 3,
+          "row_statuses": {
+            "recognized": 3,
+            "not_evaluated_after_success": 5
+          },
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 35000001825,
+              "text": "123가4567",
+              "ocr_confidence": 0.9967645406723022,
+              "box_confidence": 0.632530689239502
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 35283335173,
+              "text": "123가4567",
+              "ocr_confidence": 0.9972898364067078,
+              "box_confidence": 0.6199315786361694
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 35400001846,
+              "text": "123가4567",
+              "ocr_confidence": 0.9975926876068115,
+              "box_confidence": 0.616245448589325
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            60.939855367674156,
+            60.89891228993873,
+            60.75219541791095
+          ],
+          "max_spread_deg": 0.18765994976320144
+        }
+      },
+      "incomplete_selections": [],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/chassis/odom": 2185,
+        "/clock": 2185,
+        "/tf": 4370,
+        "/observation_lidar/scan": 364,
+        "/reobservation/scene_tf": 2185
+      },
+      "camera_samples": 308,
+      "camera_wall_sec": 92.82911171900014,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.0,
+        "target_radius_m": 1.9,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 199.669,
+      "video_end_sec": 225.919
+    },
+    {
+      "case": "rear_right_r1",
+      "requested_world_xy_yaw_deg": [
+        0.725,
+        -2.6654,
+        51.3
+      ],
+      "measured_world_xy_yaw_deg": [
+        0.7249876856803894,
+        -2.665433168411255,
+        51.26166852806975
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 79.21146553000017,
+      "moves": [
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            0.67510011364092,
+            1.4668123009038045,
+            -0.2660033612885623
+          ],
+          "distance_m": 1.6148028900323148,
+          "initial_path_clearance_m": 2.004711430292545
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            0.6686384469952518,
+            1.4485859020907002,
+            -0.24513525950869652
+          ],
+          "min_clearance_m": 1.8961026774543976
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 3,
+          "row_statuses": {
+            "recognized": 3,
+            "not_evaluated_after_success": 5
+          },
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 29466668203,
+              "text": "123가4567",
+              "ocr_confidence": 0.9984551668167114,
+              "box_confidence": 0.7935409545898438
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 29750001551,
+              "text": "123가4567",
+              "ocr_confidence": 0.9986598491668701,
+              "box_confidence": 0.801794171333313
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 29900001559,
+              "text": "123가4567",
+              "ocr_confidence": 0.9989518523216248,
+              "box_confidence": 0.808212161064148
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            119.84898250741529,
+            120.21457008579758,
+            119.75913006187176
+          ],
+          "max_spread_deg": 0.4554400239258172
+        }
+      },
+      "incomplete_selections": [],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/reobservation/scene_tf": 1914,
+        "/observation_lidar/scan": 319,
+        "/tf": 3828,
+        "/clock": 1914,
+        "/chassis/odom": 1914
+      },
+      "camera_samples": 275,
+      "camera_wall_sec": 84.80061002099956,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.0,
+        "target_radius_m": 1.9,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 225.919,
+      "video_end_sec": 250.169
+    },
+    {
+      "case": "rear_right_r2",
+      "requested_world_xy_yaw_deg": [
+        0.725,
+        -2.6654,
+        51.3
+      ],
+      "measured_world_xy_yaw_deg": [
+        0.7249844670295715,
+        -2.6654393672943115,
+        51.25902881725382
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "succeeded_after_motion",
+      "error": null,
+      "reported_success": true,
+      "correct_read": true,
+      "text": "123가4567",
+      "confirmed_at": "after",
+      "elapsed_wall_sec": 74.24929681499998,
+      "moves": [
+        {
+          "target": "ocr_candidate",
+          "goal_odom": [
+            0.6750612496120828,
+            1.4667051345567015,
+            -0.2659561220348665
+          ],
+          "distance_m": 1.6146863251766652,
+          "initial_path_clearance_m": 2.0046920762643783
+        }
+      ],
+      "arrivals": [
+        {
+          "target": "ocr_candidate",
+          "reached_pose": [
+            0.6689944999407154,
+            1.448874780084659,
+            -0.2450190370152337
+          ],
+          "min_clearance_m": 1.8736557256420738
+        }
+      ],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate",
+        "moving",
+        "observe_candidate",
+        "succeeded"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        },
+        "after": {
+          "reason": "consistent_ocr",
+          "confirmed": true,
+          "text": "123가4567",
+          "count": 3,
+          "row_statuses": {
+            "recognized": 3,
+            "not_evaluated_after_success": 5
+          },
+          "support": [
+            {
+              "slot": 0,
+              "stamp_ns": 29650001546,
+              "text": "123가4567",
+              "ocr_confidence": 0.997882604598999,
+              "box_confidence": 0.781151533126831
+            },
+            {
+              "slot": 1,
+              "stamp_ns": 29850001556,
+              "text": "123가4567",
+              "ocr_confidence": 0.9985166788101196,
+              "box_confidence": 0.7728952765464783
+            },
+            {
+              "slot": 2,
+              "stamp_ns": 30133334904,
+              "text": "123가4567",
+              "ocr_confidence": 0.9979653358459473,
+              "box_confidence": 0.8013867735862732
+            }
+          ]
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            120.40949286235562,
+            119.94209449283854,
+            119.76184350226194
+          ],
+          "max_spread_deg": 0.6476493600936806
+        }
+      },
+      "incomplete_selections": [],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/observation_lidar/scan": 310,
+        "/tf": 3722,
+        "/chassis/odom": 1861,
+        "/clock": 1859,
+        "/reobservation/scene_tf": 1859
+      },
+      "camera_samples": 257,
+      "camera_wall_sec": 79.44886907,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.0,
+        "target_radius_m": 1.9,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 250.169,
+      "video_end_sec": 273.086
+    },
+    {
+      "case": "front_left_r1",
+      "requested_world_xy_yaw_deg": [
+        7.1814,
+        2.831,
+        -128.7
+      ],
+      "measured_world_xy_yaw_deg": [
+        7.181407928466797,
+        2.8310306072235107,
+        -128.73664154007378
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "no_candidate",
+      "error": null,
+      "reported_success": false,
+      "correct_read": false,
+      "text": null,
+      "confirmed_at": null,
+      "elapsed_wall_sec": 45.7507268520003,
+      "moves": [],
+      "arrivals": [],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            68.58328463608441,
+            69.46754073463154,
+            70.74647697515921
+          ],
+          "max_spread_deg": 2.163192339074797
+        }
+      },
+      "incomplete_selections": [
+        {
+          "last_reason": "no_unique_confirmed_end_face",
+          "rejected_view": "view_target_outside_bound",
+          "goal_limit_m": 1.9,
+          "last_branch_distances_m": [
+            3.6086924171868477,
+            6.47669346151575
+          ]
+        }
+      ],
+      "last_unconfirmed_probe": "preview_only",
+      "bag_message_counts": {
+        "/chassis/odom": 1136,
+        "/tf": 2272,
+        "/observation_lidar/scan": 189,
+        "/clock": 1134,
+        "/reobservation/scene_tf": 1134
+      },
+      "camera_samples": 192,
+      "camera_wall_sec": 51.13451030900069,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.9,
+        "target_radius_m": 2.8,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 273.086,
+      "video_end_sec": 288.92
+    },
+    {
+      "case": "front_left_r2",
+      "requested_world_xy_yaw_deg": [
+        7.1814,
+        2.831,
+        -128.7
+      ],
+      "measured_world_xy_yaw_deg": [
+        7.181417942047119,
+        2.831043004989624,
+        -128.7446956140519
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "no_candidate",
+      "error": null,
+      "reported_success": false,
+      "correct_read": false,
+      "text": null,
+      "confirmed_at": null,
+      "elapsed_wall_sec": 44.3946038210006,
+      "moves": [],
+      "arrivals": [],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction",
+        "select_candidate"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            67.87321573021188,
+            71.53741255321725,
+            70.73663913665928
+          ],
+          "max_spread_deg": 3.664196823005369
+        }
+      },
+      "incomplete_selections": [
+        {
+          "last_reason": "no_unique_confirmed_end_face",
+          "rejected_view": "view_target_outside_bound",
+          "goal_limit_m": 1.9,
+          "last_branch_distances_m": [
+            3.608321426908697,
+            6.476530967634289
+          ]
+        }
+      ],
+      "last_unconfirmed_probe": "preview_only",
+      "bag_message_counts": {
+        "/chassis/odom": 1121,
+        "/tf": 2242,
+        "/observation_lidar/scan": 187,
+        "/clock": 1119,
+        "/reobservation/scene_tf": 1119
+      },
+      "camera_samples": 165,
+      "camera_wall_sec": 49.981534020000254,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.9,
+        "target_radius_m": 2.8,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 288.92,
+      "video_end_sec": 304.42
+    },
+    {
+      "case": "front_right_r1",
+      "requested_world_xy_yaw_deg": [
+        7.1814,
+        -2.6654,
+        128.7
+      ],
+      "measured_world_xy_yaw_deg": [
+        7.1814494132995605,
+        -2.66544771194458,
+        128.58024201122993
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "aborted",
+      "error": "cfv_inconsistent_axes",
+      "reported_success": false,
+      "correct_read": false,
+      "text": null,
+      "confirmed_at": null,
+      "elapsed_wall_sec": 26.5230246000001,
+      "moves": [],
+      "arrivals": [],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            95.09672403346825,
+            96.44126936626037,
+            87.4418615414731
+          ],
+          "max_spread_deg": 8.99940782478727
+        }
+      },
+      "incomplete_selections": [],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/reobservation/scene_tf": 730,
+        "/observation_lidar/scan": 121,
+        "/tf": 1460,
+        "/clock": 730,
+        "/chassis/odom": 730
+      },
+      "camera_samples": 107,
+      "camera_wall_sec": 32.11082687399994,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.0,
+        "target_radius_m": 1.9,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 304.42,
+      "video_end_sec": 315.504
+    },
+    {
+      "case": "front_right_r2",
+      "requested_world_xy_yaw_deg": [
+        7.1814,
+        -2.6654,
+        128.7
+      ],
+      "measured_world_xy_yaw_deg": [
+        7.181454658508301,
+        -2.665452003479004,
+        128.5776826795609
+      ],
+      "vehicle_world_xy_m": [
+        3.95320725440979,
+        0.08280736953020096
+      ],
+      "status": "aborted",
+      "error": "cfv_inconsistent_axes",
+      "reported_success": false,
+      "correct_read": false,
+      "text": null,
+      "confirmed_at": null,
+      "elapsed_wall_sec": 33.47608372000013,
+      "moves": [],
+      "arrivals": [],
+      "stages": [
+        "observe_initial",
+        "prepare_fresh_direction"
+      ],
+      "observations": {
+        "before": {
+          "reason": "not_detected",
+          "confirmed": false,
+          "text": null,
+          "count": 8,
+          "row_statuses": {
+            "not_detected": 8
+          },
+          "support": []
+        }
+      },
+      "cfv": {
+        "initial": {
+          "axis_deg_odom_mod180": [
+            91.12835566649204,
+            94.5721203392947,
+            87.4569596787927
+          ],
+          "max_spread_deg": 7.115160660501999
+        }
+      },
+      "incomplete_selections": [],
+      "last_unconfirmed_probe": null,
+      "bag_message_counts": {
+        "/chassis/odom": 785,
+        "/tf": 1570,
+        "/observation_lidar/scan": 131,
+        "/clock": 782,
+        "/reobservation/scene_tf": 782
+      },
+      "camera_samples": 123,
+      "camera_wall_sec": 39.58840560899989,
+      "bag_finalized": true,
+      "internal_lidar_status": "run_ended_without_trigger",
+      "motion_limits_at_end": {
+        "speed": "create3_fast",
+        "max_linear_m_s": 0.42,
+        "max_angular_rad_s": 1.35,
+        "footprint_circle_m": 1.2,
+        "radius_from_start_m": 2.0,
+        "target_radius_m": 1.9,
+        "per_leg_wall_sec": 220.0,
+        "max_session_wall_sec": 540.0
+      },
+      "detector_sha256": "8bf7a3578a708e8837969cec9dd46e290045c2e86208c6f88a0bc6a72bd62769",
+      "video_start_sec": 315.504,
+      "video_end_sec": 328.421
+    }
+  ]
+}

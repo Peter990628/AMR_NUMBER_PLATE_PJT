@@ -2,12 +2,26 @@ import copy
 import math
 import unittest
 
-from cfv_view_trial import CREATE3_EXTENDED_LEG_LIMITS, choose_view_snapshot, validate_view_leases
+from cfv_view_trial import (
+    CLOSE_LIMITS, CREATE3_EXTENDED_LEG_LIMITS, CREATE3_INITIAL_VIEW_LIMITS,
+    choose_view_snapshot, validate_view_leases, view_rejection,
+)
 from recovery_selection import CandidateSelector, SelectionConfig
 from test_recovery_selection import snapshot, pose
 
 
 class ViewCSelectionTests(unittest.TestCase):
+    def test_create3_direct_view_radius(self):
+        metrics = dict(incidence_deg=45., angular_gain_deg=20., final_yaw_change_deg=20.,
+                       vehicle_return_envelope_margin_m=.5, translation_m=1.831)
+        self.assertEqual(view_rejection(metrics, CLOSE_LIMITS), 'view_target_outside_bound')
+        self.assertIsNone(view_rejection(metrics, CREATE3_INITIAL_VIEW_LIMITS))
+        metrics['translation_m'] = 1.90
+        self.assertIsNone(view_rejection(metrics, CREATE3_INITIAL_VIEW_LIMITS))
+        metrics['translation_m'] = 1.901
+        self.assertEqual(view_rejection(metrics, CREATE3_INITIAL_VIEW_LIMITS), 'view_target_outside_bound')
+        self.assertEqual(CREATE3_INITIAL_VIEW_LIMITS['motion_radius_m'], 2.00)
+
     def test_invalid_contour_default_pose_cannot_be_ranked_or_confirmed(self):
         from cfv_trial_selection import choose_cfv_snapshot
         selected,p,c=self.fixtures()
