@@ -1,0 +1,27 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    upAxis = "Z"
+    metersPerUnit = 1
+    timeCodesPerSecond = 60
+    endTimeCode = 1000000
+    subLayers = [@../../amr_create3_front_plate.usda@]
+    customLayerData = {
+        dictionary renderSettings = {
+            bool "rtx:shadows:enabled" = 0
+        }
+    }
+)
+
+over "create3"
+{
+    over "base_link"
+    {
+        over "Camera" {
+            double3 xformOp:translate = (0.3150411552, 0.0831634521, 1.05)
+        }
+        over "front_stereo_camera_left_optical" {
+            double3 xformOp:translate = (0.3150411552, 0.0831634521, 1.05)
+        }
+    }
+}
