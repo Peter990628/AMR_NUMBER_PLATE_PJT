@@ -38,7 +38,8 @@ venv/
 *~
 .thumbs/
 
-# Private daily work notes (local only).
+# Private project brief and daily work notes (local only).
+/Codex_Robotics_CPP_Project_Brief.md
 /WORK_LOG_2026-11-11.md
 /WORK_LOG_2026-11-12.md
 /WORK_LOG_2026-11-13.md
